@@ -551,7 +551,7 @@ class ToastConfig(object):
                 suffix = ''
                 if self.noise_tod_weight:
                     suffix += ',PUSH:$' + strconv(self.noise_tod_weight) + ',MUL'
-                stack_elements.append( "PUSH:simnoise_" + ch.tag + suffix)
+                stack_elements.append( "PUSHDATA:simnoise_" + ch.tag + suffix)
                 if self.observation_is_interval:
                     # one noise tod per observation.
                     #
@@ -595,7 +595,7 @@ class ToastConfig(object):
                     suffix += ',PUSH:$' + strconv(self.horn_noise_weight) + ',MUL'
                 if len(stack_elements) != 0:
                     suffix += ',ADD'
-                stack_elements.append( "PUSH:simnoise_" + horn + suffix)
+                stack_elements.append( "PUSHDATA:simnoise_" + horn + suffix)
                 if self.observation_is_interval:
                     # one noise tod per observation
                     for iobs, observation in enumerate(self.observations):
@@ -637,35 +637,35 @@ class ToastConfig(object):
                     suffix += ',PUSH:$' + strconv(self.beamsky_weight) + ',MUL'
                 if len(stack_elements) != 0:
                     suffix += ',ADD'
-                stack_elements.append( "PUSH:beamsky_" + ch.tag + suffix)
+                stack_elements.append( "PUSHDATA:beamsky_" + ch.tag + suffix)
 
             # add real data streams, either for flags or data plus flags
             for i, x in enumerate(self.exchange_folder):
                 self.strm[ 'raw{}_{}'.format(i, ch.tag) ] = self.strset.stream_add( "raw{}_{}".format(i, ch.tag), "native", Params() )
+                suffix = ''
                 if self.eff_is_for_flags:
-                    suffix = ',FLG'
+                    stack_elements.append( "PUSHFLAG:raw{}_{}{}".format(i, ch.tag, suffix) )
                 else:
-                    suffix = ''
                     if self.exchange_weights:
                         suffix = ',PUSH:$' + strconv(self.exchange_weights[i]) + ',MUL'
                     if len(stack_elements) != 0:
                         suffix += ',ADD'
-                stack_elements.append( "PUSH:raw{}_{}{}".format(i, ch.tag, suffix) )
+                    stack_elements.append( "PUSH:raw{}_{}{}".format(i, ch.tag, suffix) )
 
             # add calibration stream
             if (not self.calibration_file is None):
                 self.strm["cal_" + ch.tag] = self.strset.stream_add( "cal_" + ch.tag, "planck_cal", Params( {"hdu":ch.tag, "path":self.calibration_file } ) )
-                stack_elements.append("PUSH:cal_" + ch.tag + ",MUL")
+                stack_elements.append("PUSHDATA:cal_" + ch.tag + ",MUL")
 
             # dipole subtract
             if self.dipole_removal:
                 self.strm["dipole_" + ch.tag] = self.strset.stream_add( "dipole_" + ch.tag, "dipole", Params( {"channel":ch.tag, "coord":"E"} ) )
-                stack_elements.append("PUSH:dipole_" + ch.tag + ",SUB")
+                stack_elements.append("PUSHDATA:dipole_" + ch.tag + ",SUB")
 
             # bad rings
             if not self.bad_rings is None:
                 self.strm["bad_" + ch.tag] = self.strset.stream_add ( "bad_" + ch.tag, "planck_bad", Params({'detector':ch.tag, 'path':self.bad_rings}) )
-                stack_elements.append("PUSH:bad_" + ch.tag + ",FLG")
+                stack_elements.append("PUSHFLAG:bad_" + ch.tag)
 
             # stack
             expr = ','.join([el for el in stack_elements])
