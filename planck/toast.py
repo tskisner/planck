@@ -481,7 +481,7 @@ class ToastConfig(object):
                     # First interval begins with the operational day, last one ends with it. New interval begins when the old stable pointing ends.
                     # First and last included samples remain the same.
                     for ipp, pp in enumerate(pointing_periods):
-                        if ipp == 0:
+                        if ipp == 0 and (ipp != len(pointing_periods) - 1):
                             # Remove the comments in this section to include period between OD and ring start
                             #if iobs == 0:
                             obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":pointing_periods[ipp+1].start}) )
