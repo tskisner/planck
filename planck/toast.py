@@ -292,7 +292,7 @@ class ToastConfig(object):
 
         if self.odrange:
             self.data_selector.by_od_range(self.odrange)
-        elif self.lfi_ring_range:
+        elif not self.lfi_ring_range is None:
             self.data_selector.by_lfi_rings(self.lfi_ring_range)
         elif self.hfi_ring_range:
             self.data_selector.by_hfi_rings(self.hfi_ring_range)
