@@ -57,6 +57,22 @@ def strconv(f):
     """Formatting for the xml"""
     return "%.16g" % f
 
+def pairsplit(det):
+    pix = ""
+    first = ""
+    second = ""
+    if det[-1] not in 'MSab':
+        pix = det
+    elif ( det.endswith('a') ):
+        pix = det.rstrip('a')
+        first = "a"
+        second = "b"
+    elif ( det.endswith('M') ):
+        pix = det.rstrip('M')
+        first = "M"
+        second = "S"
+    return pix, first, second
+
 def Params(dic=None):
     """Creates a Toast ParMap from a python dictionary"""
     params = ParMap()
@@ -75,7 +91,7 @@ DEFAULT_FLAGMASK = {'LFI':255, 'HFI':1}
 class ToastConfig(object):
     """Toast configuration class"""
 
-    def __init__(self, odrange=None, channels=None, nside=1024, ordering='RING', coord='E', outmap='outmap.fits', exchange_folder=None, fpdb=None, output_xml='toastrun.xml', ahf_folder=None, components='IQU', obtmask=None, flagmask=None, log_level=l.INFO, remote_exchange_folder=None, remote_ahf_folder=None, calibration_file=None, dipole_removal=False, noise_tod=False, noise_tod_weight=None, efftype=None, flag_HFI_bad_rings=None, include_preFLS=False, ptcorfile=None, include_repointings=False, psd=None, deaberrate=True, extend_857=False, no_wobble=False, eff_is_for_flags=False, exchange_weights=None, beamsky=None, beamsky_weight=None, interp_order=5, horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False, lfi_ring_range=None, hfi_ring_range=None, wobble_high=False):
+    def __init__(self, odrange=None, channels=None, nside=1024, ordering='RING', coord='E', outmap='outmap.fits', exchange_folder=None, fpdb=None, output_xml='toastrun.xml', ahf_folder=None, components='IQU', obtmask=None, flagmask=None, log_level=l.INFO, remote_exchange_folder=None, remote_ahf_folder=None, calibration_file=None, dipole_removal=False, noise_tod=False, noise_tod_weight=None, efftype=None, flag_HFI_bad_rings=None, include_preFLS=False, ptcorfile=None, include_repointings=False, psd=None, deaberrate=True, extend_857=False, no_wobble=False, eff_is_for_flags=False, exchange_weights=None, beamsky=None, beamsky_weight=None, interp_order=5, horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False, lfi_ring_range=None, hfi_ring_range=None, wobble_high=False, sum_diff=False):
         """TOAST configuration:
 
             odrange: list of start and end OD, AHF ODS, i.e. with whole pointing periods as the DPC is using
@@ -106,6 +122,7 @@ class ToastConfig(object):
             beamsky_weight : scaling factor to apply to the beamsky
             interp_order : beamsky interpolation order defines number of cartesian pixels to interpolate over
             observation_is_interval : If True, do not split operational days into pointing period intervals
+            sum_diff : If True, build a run containing sum and difference timestreams
 
             additional configuration options are available modifying:
             .config
@@ -136,6 +153,7 @@ class ToastConfig(object):
             raise Exception('no_wobble and wobble_high are mutually exclusive')
         self.no_wobble = no_wobble
         self.wobble_high = wobble_high
+        self.sum_diff = sum_diff
         self.include_repointings = include_repointings
         self.deaberrate = deaberrate
         self.noise_tod = noise_tod
@@ -671,6 +689,13 @@ class ToastConfig(object):
             expr = ','.join([el for el in stack_elements])
             self.strm["stack_" + ch.tag] = self.strset.stream_add ( "stack_" + ch.tag, "stack", Params( {"expr":expr} ) )
 
+            # add sum/diff stacks
+            if ( self.sum_diff ):
+                pix, first, second = pairsplit(ch.tag)
+                if ( first != "" ):
+                    self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD" % ( pix+first, pix+second) } ) )
+                    self.strm["diff_" + pix] = self.strset.stream_add ( "diff_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,SUB" % ( pix+first, pix+second) } ) )
+
 
     def add_eff_tods(self):
         """Add TOD files already included in tod_name_list and tod_par_list to the streamset"""
@@ -724,15 +749,48 @@ class ToastConfig(object):
                     "path": psdname
                     }))
 
+            # for sum / difference case, we only use RIMO filters
+            if ( self.sum_diff ):
+                pix, first, second = pairsplit(ch.tag)
+                if ( first != "" ):
+                    noise = self.strset.noise_add ( "noise_" + pix + "_sum", "native", Params() )
+                    wp = noise.psd_add ( "psd", "planck_rimo", Params( { 
+                        "start" : self.strset.observations()[0].start(),
+                        "stop" : self.strset.observations()[-1].stop(),
+                        "path": self.fpdb,
+                        "detector" : pix + "_sum"
+                        }))
+                    noise = self.strset.noise_add ( "noise_" + pix + "_diff", "native", Params() )
+                    wp = noise.psd_add ( "psd", "planck_rimo", Params( { 
+                        "start" : self.strset.observations()[0].start(),
+                        "stop" : self.strset.observations()[-1].stop(),
+                        "path": self.fpdb,
+                        "detector" : pix + "_diff"
+                        }))
+
+
             
     def add_channels(self, telescope):
         params = ParMap()
         params[ "focalplane" ] = self.conf.telescopes()[0].focalplanes()[0].name()
         for ch in self.channels:
-            params[ "detector" ] = ch.tag
-            params[ "stream" ] = "/planck/%s/stack_%s" % (self.f.inst.name, ch.tag)
-            params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, ch.tag)
-            telescope.channel_add ( ch.tag, "native", params )
+            pix, first, second = pairsplit(ch.tag)
+            if ( self.sum_diff and ( first != "" ) ):
+                # we have the first detector of a pair, and want the sum/diff
+                params[ "detector" ] = pix + "_sum"
+                params[ "stream" ] = "/planck/%s/sum_%s" % (self.f.inst.name, pix)
+                params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, pix + "_sum")
+                telescope.channel_add ( pix + "_sum", "native", params )
+                params[ "detector" ] = pix + "_diff"
+                params[ "stream" ] = "/planck/%s/diff_%s" % (self.f.inst.name, pix)
+                params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, pix + "_diff")
+                telescope.channel_add ( pix + "_diff", "native", params )
+            else:
+                # we have a spiderweb or are not doing sum/diff
+                params[ "detector" ] = ch.tag
+                params[ "stream" ] = "/planck/%s/stack_%s" % (self.f.inst.name, ch.tag)
+                params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, ch.tag)
+                telescope.channel_add ( ch.tag, "native", params )
 
 
 if __name__ == '__main__':
