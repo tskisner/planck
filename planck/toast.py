@@ -496,22 +496,24 @@ class ToastConfig(object):
             else:
                 pointing_periods = observation.PP
                 if self.include_repointings:
-                    # First interval begins with the operational day, last one ends with it. New interval begins when the old stable pointing ends.
-                    # First and last included samples remain the same.
+                    # First interval is extended to the beginning of the observation
+                    # Subsequent intervals are extended to the end of the previous interval
+                    # Last interval is extended to the end of the observation
                     for ipp, pp in enumerate(pointing_periods):
-                        if ipp == 0 and (ipp != len(pointing_periods) - 1):
-                            # Remove the comments in this section to include period between OD and ring start
-                            #if iobs == 0:
-                            obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":pointing_periods[ipp+1].start}) )
-                            #else:
-                            #    obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":observation.start, "stop":pointing_periods[ipp+1].start}) )
-                        elif ipp == len(pointing_periods) - 1:
-                            if iobs == len(self.observations) - 1:
-                                obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":pp.stop}) )
+                        if ipp == 0:
+                            if iobs > 0:
+                                ppstart = observation.start
                             else:
-                                obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":observation.stop}) )
+                                ppstart = pp.start
                         else:
-                            obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":pointing_periods[ipp+1].start}) )
+                            ppstart = pointing_periods[ipp-1].stop
+
+                        if ipp == len(pointing_periods) - 1 and iobs < len(self.observations)-1:
+                            ppstop = observation.stop
+                        else:
+                            ppstop = pp.stop
+
+                        obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":ppstart, "stop":ppstop}) )
                 else:
                     # Intervals are the stable pointing periods
                     for pp in pointing_periods:
@@ -569,7 +571,7 @@ class ToastConfig(object):
                 suffix = ''
                 if self.noise_tod_weight:
                     suffix += ',PUSH:$' + strconv(self.noise_tod_weight) + ',MUL'
-                stack_elements.append( "PUSHDATA:simnoise_" + ch.tag + suffix)
+                stack_elements.append( "PUSH:simnoise_" + ch.tag + suffix)
                 if self.observation_is_interval:
                     # one noise tod per observation.
                     #
