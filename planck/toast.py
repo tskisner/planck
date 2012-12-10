@@ -20,7 +20,7 @@ l.basicConfig(level=l.INFO)
 
 
 class PPBoundaries:
-    def __init__(self, freq, dbfile):
+    def __init__(self, freq, dbfile, obtrange=None, breakdb=None):
         """Load the start and stop OBT timestamps extracted from exchange format files"""
         self.dbfile = dbfile
 
@@ -38,12 +38,44 @@ class PPBoundaries:
         if ( freq == 70 ):
             tabname = 'ring_times_lfi70'
 
-        execstr = "select id, pointID_unique, start, stop from %s" % ( tabname )
+        if obtrange == None:
+            execstr = "select id, pointID_unique, start, stop from %s" % ( tabname )
+        else:
+            execstr = "select id, pointID_unique, start, stop from {} where start < {} and stop > {}".format( tabname, obtrange[1], obtrange[0] )
         query = c.execute( execstr )
         for id, pointID_unique, start, stop in query:
             self.ppf += [ ( start, stop ) ]
 
         c.close()
+
+        if breakdb != None:
+            # Break rings that cross a known break
+            print 'Applying breaks to noise TOD according to {}'.format(breakdb)
+
+            conn = sqlite3.connect( breakdb )
+            c = conn.cursor()
+            #obt are in clocks in the database
+            if obtrange == None:
+                execstr = 'select od, startobt, stopobt from eff_breaks where freq={}'.format(freq)
+            else:
+                execstr = 'select od, startobt, stopobt from eff_breaks where freq={} and startobt < {} and stopobt > {}'.format(freq, obtrange[1]*2**16, obtrange[0]*2**16)
+            print execstr
+            query = c.execute( execstr )
+            for od, startobt, stopobt in query:
+                # For now, no handling of special cases where the break extends beyond a single ring
+                startobt *= 2.**-16
+                stopobt *= 2.**-16
+                l.warning('Inserting break in noise to OD %d' % od)
+                try:
+                    ring = [pp for pp in self.ppf if pp[0] <= startobt and pp[1] >= stopobt][0]
+                except exceptions.IndexError:
+                    l.error('Cannot identify the noise TOD related to the break in OD %d' % od)
+                    sys.exit(1)                    
+                i = self.ppf.index( ring )
+                self.ppf[i] = ( stopobt, ring[1] )
+                self.ppf.insert( i, ( ring[0], startobt ) )
+            c.close()
+
 
     def get(self, PID):
         # LFI PID 3 is row 1
@@ -591,10 +623,11 @@ class ToastConfig(object):
                         }))                        
                 else:
                     # one noise tod per pointing period
-                    self.pp_boundaries = PPBoundaries(self.f.freq, self.data_selector.config['database'])
+                    self.pp_boundaries = PPBoundaries(self.f.freq, self.data_selector.config['database'],
+                                                      obtrange=self.data_selector.obt_range, breakdb=self.data_selector.config['breaks'])
                     for row, pp_boundaries in enumerate(self.pp_boundaries.ppf):
-                        if pp_boundaries[1] < self.observations[0].start or pp_boundaries[0] > self.observations[-1].stop:
-                            continue
+                        #if pp_boundaries[1] < self.observations[0].start or pp_boundaries[0] > self.observations[-1].stop:
+                        #    continue
                         self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, row), "sim_noise", Params({
                                "noise" : noisename,
                                "base" : basename,

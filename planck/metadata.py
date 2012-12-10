@@ -69,6 +69,7 @@ class DataSelector(object):
         self.config['exclude_454_455'] = True
         self.efftype = efftype
         self.ring_range = None
+        self.obt_range = [1e30, -1e30]
 
     @property
     def ods(self):
@@ -198,7 +199,11 @@ class DataSelector(object):
                 if pid_numbers[0] > self.ring_range[1]: continue
             if len(pid_numbers) == 1:
                 pid_numbers.append(0)
-            PP.append( Period(pid_numbers[0],q[1]/2.**16,q[2]/2.**16, pid_numbers[1]) )
+            start, stop = q[1]*2.**-16, q[2]*2.**-16
+            # Keep score of the maximum time span of the selected rings
+            if start < self.obt_range[0]: self.obt_range = [ start, self.obt_range[1] ]
+            if stop > self.obt_range[1]: self.obt_range = [ self.obt_range[0], stop ]
+            PP.append( Period(pid_numbers[0], start, stop, pid_numbers[1]) )
         c.close()
         return PP
 
@@ -258,7 +263,8 @@ def eff_ods_from_obt_range(freq, obt_range, database=None):
 def get_obt_range_from_od(od, database=None):
     conn = sqlite3.connect(database or private.database)
     c = conn.cursor()
-    query = c.execute('select start_time,end_time from list_ahf_infos where od==? order by start_time ASC', (str(od),))
+    #query = c.execute('select start_time,end_time from list_ahf_infos where od==? order by start_time ASC', (str(od),))
+    query = c.execute('select start_pID,end_time from list_ahf_infos where od==? order by start_time ASC', (str(od),)) # Use the full length with repointing
     all = query.fetchall()
     obt_range = (all[0][0]/2.**16, all[-1][-1]/2.**16)
     c.close()
