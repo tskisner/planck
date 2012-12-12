@@ -59,7 +59,6 @@ class PPBoundaries:
                 execstr = 'select od, startobt, stopobt from eff_breaks where freq={}'.format(freq)
             else:
                 execstr = 'select od, startobt, stopobt from eff_breaks where freq={} and startobt < {} and stopobt > {}'.format(freq, obtrange[1]*2**16, obtrange[0]*2**16)
-            print execstr
             query = c.execute( execstr )
             for od, startobt, stopobt in query:
                 # For now, no handling of special cases where the break extends beyond a single ring
@@ -601,7 +600,7 @@ class ToastConfig(object):
                 noisename = "/planck/" + self.f.inst.name + "/noise_" + ch.tag
                 self.strm["simnoise_" + ch.tag] = self.strset.stream_add( "simnoise_" + ch.tag, "native", Params( ) )
                 suffix = ''
-                if self.noise_tod_weight:
+                if self.noise_tod_weight and self.noise_tod_weight != 1:
                     suffix += ',PUSH:$' + strconv(self.noise_tod_weight) + ',MUL'
                 stack_elements.append( "PUSH:simnoise_" + ch.tag + suffix)
                 if self.observation_is_interval:
@@ -644,7 +643,7 @@ class ToastConfig(object):
                 noisename = "/planck/" + self.f.inst.name + "/noise_" + horn
                 self.strm["simnoise_" + horn] = self.strset.stream_add( "simnoise_" + horn, "native", Params( ) )
                 suffix = ''
-                if self.horn_noise_weight:
+                if self.horn_noise_weight and self.horn_noise_weight != 1:
                     suffix += ',PUSH:$' + strconv(self.horn_noise_weight) + ',MUL'
                 if len(stack_elements) != 0:
                     suffix += ',ADD'
@@ -686,7 +685,7 @@ class ToastConfig(object):
                     'channel' : beamskyname
                     }) )
                 suffix = ''
-                if self.beamsky_weight:
+                if self.beamsky_weight and self.beamsky_weight != 1:
                     suffix += ',PUSH:$' + strconv(self.beamsky_weight) + ',MUL'
                 if len(stack_elements) != 0:
                     suffix += ',ADD'
@@ -699,7 +698,7 @@ class ToastConfig(object):
                 if self.eff_is_for_flags:
                     stack_elements.append( "PUSHFLAG:raw{}_{}{}".format(i, ch.tag, suffix) )
                 else:
-                    if self.exchange_weights:
+                    if self.exchange_weights and self.exchange_weights[i] != 1:
                         suffix = ',PUSH:$' + strconv(self.exchange_weights[i]) + ',MUL'
                     if len(stack_elements) != 0:
                         suffix += ',ADD'
