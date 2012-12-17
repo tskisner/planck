@@ -41,7 +41,8 @@ class PPBoundaries:
         if obtrange == None:
             execstr = "select id, pointID_unique, start, stop from %s" % ( tabname )
         else:
-            execstr = "select id, pointID_unique, start, stop from {} where start < {} and stop > {}".format( tabname, obtrange[1], obtrange[0] )
+            #execstr = "select id, pointID_unique, start, stop from {} where start < {} and stop > {}".format( tabname, obtrange[1], obtrange[0] )
+            execstr = "select id, pointID_unique, start, stop from {} where start < {}".format( tabname, obtrange[1] )
         query = c.execute( execstr )
         for id, pointID_unique, start, stop in query:
             self.ppf += [ ( start, stop ) ]
@@ -58,7 +59,8 @@ class PPBoundaries:
             if obtrange == None:
                 execstr = 'select od, startobt, stopobt from eff_breaks where freq={}'.format(freq)
             else:
-                execstr = 'select od, startobt, stopobt from eff_breaks where freq={} and startobt < {} and stopobt > {}'.format(freq, obtrange[1]*2**16, obtrange[0]*2**16)
+                #execstr = 'select od, startobt, stopobt from eff_breaks where freq={} and startobt < {} and stopobt > {}'.format(freq, obtrange[1]*2**16, obtrange[0]*2**16)
+                execstr = 'select od, startobt, stopobt from eff_breaks where freq={} and startobt < {}'.format(freq, obtrange[1]*2**16)
             query = c.execute( execstr )
             for od, startobt, stopobt in query:
                 # For now, no handling of special cases where the break extends beyond a single ring
@@ -68,8 +70,8 @@ class PPBoundaries:
                 try:
                     ring = [pp for pp in self.ppf if pp[0] <= startobt and pp[1] >= stopobt][0]
                 except exceptions.IndexError:
-                    l.error('Cannot identify the noise TOD related to the break in OD %d' % od)
-                    sys.exit(1)                    
+                    l.warning('Cannot identify the noise TOD related to the break in OD %d' % od)
+                    continue
                 i = self.ppf.index( ring )
                 self.ppf[i] = ( stopobt, ring[1] )
                 self.ppf.insert( i, ( ring[0], startobt ) )
@@ -122,7 +124,7 @@ DEFAULT_FLAGMASK = {'LFI':255, 'HFI':1}
 class ToastConfig(object):
     """Toast configuration class"""
 
-    def __init__(self, odrange=None, channels=None, nside=1024, ordering='RING', coord='E', outmap='outmap.fits', exchange_folder=None, fpdb=None, output_xml='toastrun.xml', ahf_folder=None, components='IQU', obtmask=None, flagmask=None, log_level=l.INFO, remote_exchange_folder=None, remote_ahf_folder=None, calibration_file=None, dipole_removal=False, noise_tod=False, noise_tod_weight=None, efftype=None, flag_HFI_bad_rings=None, include_preFLS=False, ptcorfile=None, include_repointings=False, psd=None, deaberrate=True, extend_857=False, no_wobble=False, eff_is_for_flags=False, exchange_weights=None, beamsky=None, beamsky_weight=None, interp_order=5, horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False, lfi_ring_range=None, hfi_ring_range=None, wobble_high=False, sum_diff=False):
+    def __init__(self, odrange=None, channels=None, nside=1024, ordering='RING', coord='E', outmap='outmap.fits', exchange_folder=None, fpdb=None, output_xml='toastrun.xml', ahf_folder=None, components='IQU', obtmask=None, flagmask=None, log_level=l.INFO, remote_exchange_folder=None, remote_ahf_folder=None, calibration_file=None, dipole_removal=False, noise_tod=False, noise_tod_weight=None, efftype=None, flag_HFI_bad_rings=None, include_preFLS=True, ptcorfile=None, include_repointings=False, psd=None, deaberrate=True, extend_857=False, no_wobble=False, eff_is_for_flags=False, exchange_weights=None, beamsky=None, beamsky_weight=None, interp_order=5, horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False, lfi_ring_range=None, hfi_ring_range=None, wobble_high=False, sum_diff=False):
         """TOAST configuration:
 
             odrange: list of start and end OD, AHF ODS, i.e. with whole pointing periods as the DPC is using
@@ -314,7 +316,7 @@ class ToastConfig(object):
             efftype ='R'
             if self.f.inst.name == 'LFI' and (not calibration_file is None):
                 efftype ='C'
-        self.data_selector = DataSelector(channels=self.channels, efftype=efftype, include_preFLS=include_preFLS)
+        self.data_selector = DataSelector(channels=self.channels, efftype=efftype, include_preFLS=include_preFLS, include_repointings=include_repointings)
 
         self.exchange_weights = exchange_weights
 
@@ -526,29 +528,9 @@ class ToastConfig(object):
                 obs.interval_add( '{:04}'.format(iobs), "native", Params({"start":observation.start, "stop":observation.stop}) )
             else:
                 pointing_periods = observation.PP
-                if self.include_repointings:
-                    # First interval is extended to the beginning of the observation
-                    # Subsequent intervals are extended to the end of the previous interval
-                    # Last interval is extended to the end of the observation
-                    for ipp, pp in enumerate(pointing_periods):
-                        if ipp == 0:
-                            if iobs > 0:
-                                ppstart = observation.start
-                            else:
-                                ppstart = pp.start
-                        else:
-                            ppstart = pointing_periods[ipp-1].stop
-
-                        if ipp == len(pointing_periods) - 1 and iobs < len(self.observations)-1:
-                            ppstop = observation.stop
-                        else:
-                            ppstop = pp.stop
-
-                        obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":ppstart, "stop":ppstop}) )
-                else:
-                    # Intervals are the stable pointing periods
-                    for pp in pointing_periods:
-                        obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":pp.stop}) )
+                # Intervals are the stable pointing periods
+                for pp in pointing_periods:
+                    obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":pp.stop}) )
 
             for ch in self.channels:
                 print("Observation %d%s, EFF ODs:%s" % (observation.od, observation.tag, str(map(get_eff_od, observation.EFF))))
@@ -622,11 +604,14 @@ class ToastConfig(object):
                         }))                        
                 else:
                     # one noise tod per pointing period
+                    # Must retrieve all pp_boundaries to properly increment the stream index
                     self.pp_boundaries = PPBoundaries(self.f.freq, self.data_selector.config['database'],
                                                       obtrange=self.data_selector.obt_range, breakdb=self.data_selector.config['breaks'])
+                    #self.pp_boundaries = PPBoundaries(self.f.freq, self.data_selector.config['database'],
+                    #                                  obtrange=None, breakdb=self.data_selector.config['breaks'])
                     for row, pp_boundaries in enumerate(self.pp_boundaries.ppf):
-                        #if pp_boundaries[1] < self.observations[0].start or pp_boundaries[0] > self.observations[-1].stop:
-                        #    continue
+                        if pp_boundaries[1] < self.observations[0].start or pp_boundaries[0] > self.observations[-1].stop:
+                            continue
                         self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, row), "sim_noise", Params({
                                "noise" : noisename,
                                "base" : basename,

@@ -49,8 +49,11 @@ class DataSelector(object):
     
     some configuration options can be modified after creating the object by accessing the .config dictionary"""
 
-    def __init__(self, channels=None, efftype='R', include_preFLS=False):
+    def __init__(self, channels=None, efftype='R', include_preFLS=True, include_repointings=False):
+        if include_preFLS == False:
+            raise Exception('Not including preFLS is not currently supported')
         self.include_preFLS = include_preFLS
+        self.include_repointings = include_repointings
         self.channels = parse_channels(channels)
 
         if self.channels is None:
@@ -185,10 +188,13 @@ class DataSelector(object):
         """Gets all the pointing periods in one Operational Day, returns a list of Period named tuples"""
         conn = sqlite3.connect(self.config['database'])
         c = conn.cursor()
-        if self.include_preFLS:
-            query = c.execute('select pointID_unique, start_time, end_time from list_ahf_infos where od==? AND start_time < end_time order by start_time ASC', (str(od),))
+        #if self.include_preFLS: preFLS is required for full OD. It is flagged, though
+        if self.include_repointings:
+            query = c.execute('select pointID_unique, start_pID, end_time from list_ahf_infos where od==? AND start_time < end_time order by start_time ASC', (str(od),))
         else:
-            query = c.execute('select pointID_unique, start_time, end_time from list_ahf_infos where od==? and start_time > 106743579730069 AND  start_time < end_time order by start_time ASC', (str(od),))
+            query = c.execute('select pointID_unique, start_time, end_time from list_ahf_infos where od==? AND start_time < end_time order by start_time ASC', (str(od),))
+        #else:
+        #    query = c.execute('select pointID_unique, start_time, end_time from list_ahf_infos where od==? and start_time > 106743579730069 AND  start_time < end_time order by start_time ASC', (str(od),))
 
         PP = []
         for q in query:
@@ -263,6 +269,7 @@ def eff_ods_from_obt_range(freq, obt_range, database=None):
 def get_obt_range_from_od(od, database=None):
     conn = sqlite3.connect(database or private.database)
     c = conn.cursor()
+    # We want to specify the OD in terms of all available data, not just science scans
     #query = c.execute('select start_time,end_time from list_ahf_infos where od==? order by start_time ASC', (str(od),))
     query = c.execute('select start_pID,end_time from list_ahf_infos where od==? order by start_time ASC', (str(od),)) # Use the full length with repointing
     all = query.fetchall()
