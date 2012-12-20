@@ -5,10 +5,11 @@ import os
 import exceptions
 import glob
 import sqlite3
+from ringdb import RingDB
+from collections import OrderedDict
 
 import private
 from Planck import parse_channels, EXCLUDED_CH
-from metadata import DataSelector
 from collections import defaultdict
 
 import logging as l
@@ -18,77 +19,34 @@ import pyfits
 
 l.basicConfig(level=l.INFO)
 
-
-class PPBoundaries:
-    def __init__(self, freq, dbfile, obtrange=None, breakdb=None):
-        """Load the start and stop OBT timestamps extracted from exchange format files"""
-        self.dbfile = dbfile
-
-        conn = sqlite3.connect( dbfile )
-        c = conn.cursor()
-
-        self.ppf = []
-
-        tabname = 'ring_times_hfi'
-
-        if ( freq == 30 ):
-            tabname = 'ring_times_lfi30'
-        if ( freq == 44 ):
-            tabname = 'ring_times_lfi44'
-        if ( freq == 70 ):
-            tabname = 'ring_times_lfi70'
-
-        if obtrange == None:
-            execstr = "select id, pointID_unique, start, stop from %s" % ( tabname )
-        else:
-            #execstr = "select id, pointID_unique, start, stop from {} where start < {} and stop > {}".format( tabname, obtrange[1], obtrange[0] )
-            execstr = "select id, pointID_unique, start, stop from {} where start < {}".format( tabname, obtrange[1] )
-        query = c.execute( execstr )
-        for id, pointID_unique, start, stop in query:
-            self.ppf += [ ( start, stop ) ]
-
-        c.close()
-
-        if breakdb != None:
-            # Break rings that cross a known break
-            print 'Applying breaks to noise TOD according to {}'.format(breakdb)
-
-            conn = sqlite3.connect( breakdb )
-            c = conn.cursor()
-            #obt are in clocks in the database
-            if obtrange == None:
-                execstr = 'select od, startobt, stopobt from eff_breaks where freq={}'.format(freq)
-            else:
-                #execstr = 'select od, startobt, stopobt from eff_breaks where freq={} and startobt < {} and stopobt > {}'.format(freq, obtrange[1]*2**16, obtrange[0]*2**16)
-                execstr = 'select od, startobt, stopobt from eff_breaks where freq={} and startobt < {}'.format(freq, obtrange[1]*2**16)
-            query = c.execute( execstr )
-            for od, startobt, stopobt in query:
-                # For now, no handling of special cases where the break extends beyond a single ring
-                startobt *= 2.**-16
-                stopobt *= 2.**-16
-                l.warning('Inserting break in noise to OD %d' % od)
-                try:
-                    ring = [pp for pp in self.ppf if pp[0] <= startobt and pp[1] >= stopobt][0]
-                except exceptions.IndexError:
-                    l.warning('Cannot identify the noise TOD related to the break in OD %d' % od)
-                    continue
-                i = self.ppf.index( ring )
-                self.ppf[i] = ( stopobt, ring[1] )
-                self.ppf.insert( i, ( ring[0], startobt ) )
-            c.close()
+def find_AHF(dir, od):
+    """Searches the supplied directory for an AHF file with velocity information appended"""
+    pattern = '{}/{:04}/vel_att_hist_high_*_{:04}_*fits'.format( dir, od, od )
+    files = glob.glob( pattern )
+    if len(files) == 0:
+        raise Exception('Found no AHF file matching {}'.format( pattern ))
+    
+    return sorted( files )[-1]
 
 
-    def get(self, PID):
-        # LFI PID 3 is row 1
-        filerow = PID - 2
-        return self.ppf[filerow]
+def find_EFF(dir, od, freq, efftype):
+    """Searches the supplied directory for an Exchange File Format file with right frequency and type"""
+    pattern = '{}/{:04}/L{:03}-{:04}-{}-*fits'.format( dir, od, freq, od, efftype )
+    files = glob.glob( pattern )
+    if len(files) == 0:
+        raise Exception('Found no EFF file matching {}'.format( pattern ))
+    
+    return sorted( files )[-1]
+
 
 def get_eff_od(file_path):
     return int(os.path.basename(file_path).split('-')[1])
 
+
 def strconv(f):
     """Formatting for the xml"""
     return "%.16g" % f
+
 
 def pairsplit(det):
     pix = ""
@@ -124,13 +82,43 @@ DEFAULT_FLAGMASK = {'LFI':255, 'HFI':1}
 class ToastConfig(object):
     """Toast configuration class"""
 
-    def __init__(self, odrange=None, channels=None, nside=1024, ordering='RING', coord='E', outmap='outmap.fits', exchange_folder=None, fpdb=None, output_xml='toastrun.xml', ahf_folder=None, components='IQU', obtmask=None, flagmask=None, log_level=l.INFO, remote_exchange_folder=None, remote_ahf_folder=None, calibration_file=None, dipole_removal=False, noise_tod=False, noise_tod_weight=None, efftype=None, flag_HFI_bad_rings=None, include_preFLS=True, ptcorfile=None, include_repointings=False, psd=None, deaberrate=True, extend_857=False, no_wobble=False, eff_is_for_flags=False, exchange_weights=None, beamsky=None, beamsky_weight=None, interp_order=5, horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False, lfi_ring_range=None, hfi_ring_range=None, wobble_high=False, sum_diff=False):
+    def __init__(self, ringdb, fpdb, 
+                 time_range=None, click_range=None, lfi_ring_range=None, hfi_ring_range=None, od_range=None,
+                 # Detector information
+                 channels=None, extend_857=False,
+                 psd=None,
+                 output_xml='toastrun.xml', log_level=l.INFO,
+                 # Map params
+                 nside=1024, ordering='RING', coord='E', outmap='outmap.fits', components='IQU',
+                 # Data directories
+                 exchange_folder=None, ahf_folder=None,
+                 remote_exchange_folder=None, remote_ahf_folder=None,
+                 exchange_weights=None, eff_is_for_flags=False,
+                 efftype=None,
+                 # Flag selection
+                 use_SCM=True, use_HCM=False, use_OCM=False,
+                 obtmask=None, flagmask=None, flag_HFI_bad_rings=False,
+                 # pointing corrections
+                 ptcorfile=None, no_wobble=False, wobble_high=False, deaberrate=True,
+                 calibration_file=None, dipole_removal=False,
+                 # Noise simulation
+                 noise_tod=False, noise_tod_weight=None,
+                 horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False,
+                 # Beamsky params
+                 beamsky=None, beamsky_weight=None, interp_order=5,
+                 
+                 sum_diff=False):
         """TOAST configuration:
 
-            odrange: list of start and end OD, AHF ODS, i.e. with whole pointing periods as the DPC is using
+            ringdb: AHF ring definition database file
+            fpdb: Planck Focalplane Database
+            channels: one of integer frequency, channel string, list of channel strings
+            od_range: list of start and end OD, AHF ODS, i.e. with whole pointing periods as the DPC is using
             lfi_ring_range: first and last LFI pointing ID to include
             hfi_ring_range: first and last HFI ring number to include
-            channels: one of integer frequency, channel string, list of channel strings
+            use_SCM(True) : Include Science scans
+            use_HCM(False) : Include repointing maneuvers
+            use_OCM(False) : Include Orbital Control Maneuvers
             obtmask and flagmask: default LFI 1,255 HFI 1,1
             exchange_folder: either a string or a container or strings listing locations for Exchange Format data
             exchange_weights: list of scaling factors to apply to Exchange data prior to coadding
@@ -140,9 +128,7 @@ class ToastConfig(object):
             dipole_removal: dipole removal is performed ONLY if calibration is specified
             noise_tod: Add simulated noise TODs
             noise_tod_weight: scaling factor to apply to noise_tod
-            flag_HFI_bad_rings: if None, flagged just for HFI. If a valid file, use that as input.
-            include_preFLS : if None, True for LFI
-            include_repointings : Construct intervals with the 4 minute repointing maneuvers: 10% dataset increase, continuous time stamps
+            flag_HFI_bad_rings: If a valid file, use that as input.
             psd : templated name of an ASCII PSD files. Tag CHANNEL will be replaced with the appropriate channel identifier.
             horn_noise_tod : False
             horn_noise_weight : None
@@ -154,7 +140,6 @@ class ToastConfig(object):
             beamsky : templated name of the beamsky files for OTF sky convolution. Tag CHANNEL will be replaced with the appropriate channel identifier.
             beamsky_weight : scaling factor to apply to the beamsky
             interp_order : beamsky interpolation order defines number of cartesian pixels to interpolate over
-            observation_is_interval : If True, do not split operational days into pointing period intervals
             sum_diff : If True, build a run containing sum and difference timestreams
 
             additional configuration options are available modifying:
@@ -164,30 +149,30 @@ class ToastConfig(object):
             dictionaries before running .run()
         """
         l.root.level = log_level
+        self.channels = parse_channels(channels)
+        self.f = self.channels[0].f
+        if not os.path.isfile( ringdb ):
+            raise Exception('Sorry, unable to open ring database: {}'.format(str(ringdb)))
+        self.ringdb = RingDB( ringdb, self.f.freq, time_range=time_range, click_range=click_range, lfi_ring_range=lfi_ring_range, hfi_ring_range=hfi_ring_range, od_range=od_range,
+                              use_SCM=use_SCM, use_HCM=use_HCM, use_OCM=use_OCM)
+        self.ringdb.apply_breaks()
+        if not os.path.isfile( fpdb ):
+            raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
+        self.fpdb = fpdb
         self.extend_857 = extend_857
         if self.extend_857:
             if '857-4' in EXCLUDED_CH: EXCLUDED_CH.remove('857-4')
-        if sum([odrange!=None, lfi_ring_range!=None, hfi_ring_range!=None]) != 1:
-            raise Exception('Must specify exactly one type of data span: OD, LFI PID or HFI ring')
-        self.odrange = odrange
-        self.lfi_ring_range = lfi_ring_range
-        self.hfi_ring_range = hfi_ring_range
         self.nside = nside
         self.coord = coord
         self.ordering = ordering
         self.outmap = outmap
-        if channels == None:
-            raise Exception('Must define which channels to include')
-        self.channels = parse_channels(channels)
-        self.f = self.channels[0].f
+        if channels == None: raise Exception('Must define which channels to include')
         self.output_xml = output_xml
         self.ptcorfile = ptcorfile
-        if no_wobble and wobble_high:
-            raise Exception('no_wobble and wobble_high are mutually exclusive')
+        if no_wobble and wobble_high: raise Exception('no_wobble and wobble_high are mutually exclusive')
         self.no_wobble = no_wobble
         self.wobble_high = wobble_high
         self.sum_diff = sum_diff
-        self.include_repointings = include_repointings
         self.deaberrate = deaberrate
         self.noise_tod = noise_tod
         self.noise_tod_weight = noise_tod_weight
@@ -197,11 +182,9 @@ class ToastConfig(object):
         self.horn_noise_psd = horn_noise_psd
         if self.horn_noise_tod and not self.horn_noise_psd:
             raise Exception('Must specify horn_noise_psd template name when enabling horn_noise')
-        self.fpdb = fpdb or private.rimo[self.f.inst.name]
         self.beamsky = beamsky
         self.beamsky_weight = beamsky_weight
         self.interp_order = interp_order
-        self.observation_is_interval = observation_is_interval
         self.rngorder = {
             'LFI18M' : 0,
             'LFI18S' : 1,
@@ -313,43 +296,29 @@ class ToastConfig(object):
             self.config['pairflags'] = False
 
         if efftype is None:
-            efftype ='R'
+            self.efftype ='R'
             if self.f.inst.name == 'LFI' and (not calibration_file is None):
                 efftype ='C'
-        self.data_selector = DataSelector(channels=self.channels, efftype=efftype, include_preFLS=include_preFLS, include_repointings=include_repointings)
 
-        self.exchange_weights = exchange_weights
-
-        if remote_exchange_folder:
-            if isinstance(remote_exchange_folder, str):
-                remote_exchange_folder = [remote_exchange_folder]
-            if remote_exchange_folder[-1] != '/':
-                remote_exchange_folder += '/'
-
-        self.remote_exchange_folder = remote_exchange_folder
-        if remote_ahf_folder:
-            if remote_ahf_folder[-1] != '/':
-                remote_ahf_folder += '/'
+        if not os.path.isdir(str(ahf_folder)):
+            raise Exception('No such AHF folder: {}'.format( str(ahf_folder) ) )
+        self.ahf_folder = ahf_folder
         self.remote_ahf_folder = remote_ahf_folder
+        
         if exchange_folder:
             if isinstance(exchange_folder, str):
                 exchange_folder = [exchange_folder]
-            self.exchange_folder = exchange_folder
-
-            self.data_selector.config[ 'exchangefolder' ] = exchange_folder[0]
-            
-        if ahf_folder:
-            self.data_selector.config['ahf_folder'] = ahf_folder
-
-        if self.odrange:
-            self.data_selector.by_od_range(self.odrange)
-        elif not self.lfi_ring_range is None:
-            self.data_selector.by_lfi_rings(self.lfi_ring_range)
-        elif self.hfi_ring_range:
-            self.data_selector.by_hfi_rings(self.hfi_ring_range)
-        else:
-            raise Exception('Must specify one type of data span')
+            for d in exchange_folder:
+                if not os.path.isdir(str(d)):
+                    raise Exception('No such EFF folder: {}'.format( str(d) ) )
+        self.exchange_folder = exchange_folder
         
+        if remote_exchange_folder:
+            if isinstance(remote_exchange_folder, str):
+                remote_exchange_folder = [remote_exchange_folder]
+        self.remote_exchange_folder = remote_exchange_folder
+        
+        self.exchange_weights = exchange_weights
 
         self.wobble = private.WOBBLE
         self.components = components
@@ -360,22 +329,14 @@ class ToastConfig(object):
         self.calibration_file = calibration_file
         self.dipole_removal = dipole_removal
 
-        if flag_HFI_bad_rings is None:
-            if self.f.inst.name == 'HFI':
-                flag_HFI_bad_rings = True
-            else:
-                flag_HFI_bad_rings = False
-        if flag_HFI_bad_rings:
-            if ( os.path.isfile(str(flag_HFI_bad_rings)) ):
-                self.bad_rings = flag_HFI_bad_rings
-            else:
-                self.bad_rings = private.HFI_badrings
-        else:
-            self.bad_rings = None
+        if flag_HFI_bad_rings and not os.path.isfile(str(flag_HFI_bad_rings)):
+            raise Exception('Sorry, unable to open HFI bad ring list: {}'.format(str(flag_hfi_bad_rings)))
+        self.bad_rings = flag_HFI_bad_rings
 
         self.eff_is_for_flags = eff_is_for_flags
 
         self.fptab = None
+
 
     def parse_fpdb(self, channel, key):
         if self.fptab == None:
@@ -384,6 +345,7 @@ class ToastConfig(object):
         if np.sum(ind) != 1:
             raise Exception('Error matching {} in {}: {} matches.'.format(channel, self.fpdb, np.sum(ind)))
         return fptab.field(key)[ind][0]
+
 
     def run(self, write=True):
         """Call the python-toast bindings to create the xml configuration file"""
@@ -404,11 +366,6 @@ class ToastConfig(object):
                 "nside"  : str(self.nside),
                 "units"  : "micro-K"
             }))
-
-        #if self.f.inst.name == 'LFI':
-        #    wobble_offset = 0;
-        #else:
-        #    wobble_offset = self.wobble["psi2_offset"]
 
         if self.no_wobble:
             teleparams = {
@@ -464,20 +421,11 @@ class ToastConfig(object):
 
     def add_pointing(self, telescope):
         # Add pointing files
-        for i,ahf in enumerate(self.data_selector.get_AHF()):  
-            path = str(ahf[0])
-            if self.remote_ahf_folder:
-                path = path.replace(self.data_selector.config['ahf_folder'], self.remote_ahf_folder)
+        for i, od in enumerate( self.ringdb.ods ):
+            path = find_AHF( self.ahf_folder, od )
+            if self.remote_ahf_folder: path = path.replace(self.ahf_folder, self.remote_ahf_folder)
+                
             telescope.pointing_add ( "%04d" % i, "planck_ahf", Params({"path": path}))
-
-
-    @property
-    def observations(self):
-        try:
-            return self._observations
-        except:
-            self._observations = self.data_selector.get_OBS()
-            return self.observations
 
 
     def add_observations(self, telescope):
@@ -500,8 +448,6 @@ class ToastConfig(object):
         # then the observation will span the time range of the EFF data specified in
         # the "times1", "times2", "times3", etc parameters.
 
-        broken_od = defaultdict(None)
-
         # Observations are same for all datasets but now there may be
         # several exchange folders and raw streams to add. Therefore
         # tod_name_list and tod_par_list are lists of dictionaries.
@@ -514,28 +460,33 @@ class ToastConfig(object):
             
         # Add observations
 
-        for iobs, observation in enumerate(self.observations):
-            params = {"start":observation.start, "stop":observation.stop}
-            for i, eff in enumerate(observation.EFF):
+        for iobs, observation in enumerate(self.ringdb.observations):
+            params = {'start':observation['start_time'], 'stop':observation['stop_time']}
+
+            eff_files = OrderedDict()
+            eff_ods = self.ringdb.get_eff_ods(observation['ods'])
+            for eff_od in eff_ods:
+                eff_files[ find_EFF(self.exchange_folder[0], eff_od, self.f.freq, self.efftype) ] = True
+            eff_files = eff_files.keys()
+            for i, eff in enumerate( eff_files ):
                 if self.remote_exchange_folder:
                     params[ "times%d" % (i+1) ] = eff.replace(self.exchange_folder[0], self.remote_exchange_folder[0])
                 else:
                     params[ "times%d" % (i+1) ] = eff
-            obs = self.strset.observation_add ( "%04d%s" % (observation.od, observation.tag) , "planck_exchange", Params(params) )
+                    
+            obs = self.strset.observation_add ( observation['id'] , "planck_exchange", Params(params) )
 
-            if self.observation_is_interval:
-                # intervals are observations
-                obs.interval_add( '{:04}'.format(iobs), "native", Params({"start":observation.start, "stop":observation.stop}) )
-            else:
-                pointing_periods = observation.PP
-                # Intervals are the stable pointing periods
-                for pp in pointing_periods:
-                    obs.interval_add( "%05d-%d" % (pp.number, pp.splitnumber), "native", Params({"start":pp.start, "stop":pp.stop}) )
+            for interval in observation['intervals']:
+                obs.interval_add( interval['id'], 'native', Params({'start':interval['start_time'], 'stop':interval['stop_time']}) )
 
-            for ch in self.channels:
-                print("Observation %d%s, EFF ODs:%s" % (observation.od, observation.tag, str(map(get_eff_od, observation.EFF))))
-                for ix, fx in enumerate(self.exchange_folder):
-                    for i, file_path in enumerate(observation.EFF):
+            for ix, exchange_folder in enumerate(self.exchange_folder):
+                eff_files = OrderedDict()
+                for eff_od in eff_ods:
+                    eff_files[ find_EFF(exchange_folder, eff_od, self.f.freq, self.efftype) ] = True
+                eff_files = eff_files.keys()
+                    
+                for ch in self.channels:
+                    for i, file_path in enumerate(eff_files):
                         eff_od = get_eff_od(file_path)
                         # Add TODs for this stream
                         params = {}
@@ -549,14 +500,13 @@ class ToastConfig(object):
                         else:
                             params[ "path" ] = file_path.replace(self.exchange_folder[0], self.exchange_folder[ix])
                         tag = ''
-                        if i==(len(observation.EFF)-1) and not observation.break_startrow is None:
-                            params['rows'] = observation.break_startrow + 1
-                            tag = 'a'
-                            broken_od[ch.tag] = eff_od
-                        if not observation.break_stoprow is None and broken_od[ch.tag]==eff_od:
-                            params['startrow'] = observation.break_stoprow
-                            tag = 'b'
-                            broken_od[ch.tag] = None
+                        if 'eff_od' in observation and observation['eff_od'] == eff_od:
+                            if 'nrow' in observation:
+                                params['rows'] = observation['nrow']
+                                tag = 'a'
+                            if 'start_row' in observation:
+                                params['startrow'] = observation['start_row']
+                                tag = 'b'
                         name = "%s_%d%s" % (ch.tag, eff_od, tag)
                         if name not in self.tod_name_list[ix][ch.tag]:
                             print('add ' + name)
@@ -585,40 +535,16 @@ class ToastConfig(object):
                 if self.noise_tod_weight and self.noise_tod_weight != 1:
                     suffix += ',PUSH:$' + strconv(self.noise_tod_weight) + ',MUL'
                 stack_elements.append( "PUSH:simnoise_" + ch.tag + suffix)
-                if self.observation_is_interval:
-                    # one noise tod per observation.
-                    #
-                    # FIXME: this code will not work.  the start and stop times
-                    #    must be the *detector* start and stop times inside
-                    #    the observation boundaries (which are set by the AHF).
-                    #    so you must iterate over self.pp_boundaries and find
-                    #    the first and last valid detector times inside this observation.
-                    #
-                    for iobs, observation in enumerate(self.observations):
-                        self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, iobs), "sim_noise", Params({
-                               "noise" : noisename,
-                               "base" : basename,
-                               "start" : observation.start,
-                               "stop" : observation.stop,
-                               "offset" : rngstream + iobs
-                        }))                        
-                else:
-                    # one noise tod per pointing period
-                    # Must retrieve all pp_boundaries to properly increment the stream index
-                    self.pp_boundaries = PPBoundaries(self.f.freq, self.data_selector.config['database'],
-                                                      obtrange=self.data_selector.obt_range, breakdb=self.data_selector.config['breaks'])
-                    #self.pp_boundaries = PPBoundaries(self.f.freq, self.data_selector.config['database'],
-                    #                                  obtrange=None, breakdb=self.data_selector.config['breaks'])
-                    for row, pp_boundaries in enumerate(self.pp_boundaries.ppf):
-                        if pp_boundaries[1] < self.observations[0].start or pp_boundaries[0] > self.observations[-1].stop:
-                            continue
-                        self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, row), "sim_noise", Params({
-                               "noise" : noisename,
-                               "base" : basename,
-                               "start" : pp_boundaries[0],
-                               "stop" : pp_boundaries[1],
-                               "offset" : rngstream + row
-                        }))
+                # one noise tod per pointing period
+                # Must retrieve all pp_boundaries to properly increment the stream index
+                for interval in self.ringdb.detector_intervals:
+                    self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, interval['index']), "sim_noise", Params({
+                           "noise" : noisename,
+                           "base" : basename,
+                           "start" : interval['start_time'],
+                           "stop" : interval['stop_time'],
+                           "offset" : rngstream + interval['index']
+                    }))
 
             # add simulated noise stream common to each horn
             if self.horn_noise_tod and ch.tag[-1] in 'MSab':
@@ -633,29 +559,15 @@ class ToastConfig(object):
                 if len(stack_elements) != 0:
                     suffix += ',ADD'
                 stack_elements.append( "PUSHDATA:simnoise_" + horn + suffix)
-                if self.observation_is_interval:
-                    # one noise tod per observation
-                    for iobs, observation in enumerate(self.observations):
-                        self.strm["simnoise_" + horn].tod_add ( "nse_%s_%05d" % (horn, iobs), "sim_noise", Params({
-                               "noise" : noisename,
-                               "base" : basename,
-                               "start" : observation.start,
-                               "stop" : observation.stop,
-                               "offset" : rngstream + iobs
-                        }))                        
-                else:
-                    # one noise tod per pointing period
-                    self.pp_boundaries = PPBoundaries(self.f.freq)
-                    for row, pp_boundaries in enumerate(self.pp_boundaries.ppf):
-                        if pp_boundaries[1] < self.observations[0].start or pp_boundaries[0] > self.observations[-1].stop:
-                            continue
-                        self.strm["simnoise_" + horn].tod_add ( "nse_%s_%05d" % (horn, row), "sim_noise", Params({
-                               "noise" : noisename,
-                               "base" : basename,
-                               "start" : pp_boundaries[0],
-                               "stop" : pp_boundaries[1],
-                               "offset" : rngstream + row
-                        }))
+                # one noise tod per pointing period
+                for interval in self.ringdb.detector_intervals:
+                    self.strm["simnoise_" + horn].tod_add ( "nse_%s_%05d" % (horn, interval['index']), "sim_noise", Params({
+                           "noise" : noisename,
+                           "base" : basename,
+                           "start" : pp_boundaries[0],
+                           "stop" : pp_boundaries[1],
+                           "offset" : rngstream + interval['index']
+                    }))
 
             # add the beam sky
             if self.beamsky:
@@ -700,7 +612,7 @@ class ToastConfig(object):
                 stack_elements.append("PUSHDATA:dipole_" + ch.tag + ",SUB")
 
             # bad rings
-            if not self.bad_rings is None:
+            if self.bad_rings:
                 self.strm["bad_" + ch.tag] = self.strset.stream_add ( "bad_" + ch.tag, "planck_bad", Params({'detector':ch.tag, 'path':self.bad_rings}) )
                 stack_elements.append("PUSHFLAG:bad_" + ch.tag)
 
@@ -816,7 +728,10 @@ if __name__ == '__main__':
 
     # Default LFI run
 
-    conf = ToastConfig([740, 760], 30, nside=1024, ordering='RING', coord='E', efftype='R', output_xml='test_30_default.xml')
+    #conf = ToastConfig([740, 760], 30, nside=1024, ordering='RING', coord='E', efftype='R', output_xml='test_30_default.xml')
+    conf = ToastConfig( 'db.db', 'LFI_RIMO_18092012_FFP6_v1_PTCOR6_hornpnt.fits',
+                        od_range=[98,98], channels=['LFI28M'], ahf_folder='AHF', exchange_folder='EFF',
+                        noise_tod=True, eff_is_for_flags=False)
     conf.run()
 
 #    # LFI run with noise simulation and real data flags
