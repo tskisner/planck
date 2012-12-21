@@ -39,6 +39,16 @@ def find_EFF(dir, od, freq, efftype):
     return sorted( files )[-1]
 
 
+def get_pair( det ):
+    """If the supplied detector shares a horn with another one, return the name of the other detector"""
+    pair1 = det.replace('a','b').replace('M','S').replace('A','B')
+    pair2 = det.replace('b','a').replace('S','M').replace('B','A')
+
+    if pair1 != det: return pair1
+    elif pair2 != det: return pair2
+    else: return None
+
+
 def get_eff_od(file_path):
     return int(os.path.basename(file_path).split('-')[1])
 
@@ -464,15 +474,30 @@ class ToastConfig(object):
             params = {'start':observation['start_time'], 'stop':observation['stop_time']}
 
             eff_files = OrderedDict()
-            eff_ods = self.ringdb.get_eff_ods(observation['ods'])
-            for eff_od in eff_ods:
+            eff_ods = self.ringdb.get_eff_ods(observation['ods']) # dictionary of dictionaries
+            earliest = 1e30
+            latest = -1e30
+            for eff_od, oddict in eff_ods.items():
+                earliest = min( earliest, oddict['start_time'] )
+                latest = max( latest, oddict['stop_time'] )
                 eff_files[ find_EFF(self.exchange_folder[0], eff_od, self.f.freq, self.efftype) ] = True
+            print eff_files
             eff_files = eff_files.keys()
             for i, eff in enumerate( eff_files ):
                 if self.remote_exchange_folder:
                     params[ "times%d" % (i+1) ] = eff.replace(self.exchange_folder[0], self.remote_exchange_folder[0])
                 else:
                     params[ "times%d" % (i+1) ] = eff
+
+            if 'nrow' in observation:
+                params['latest'] = observation['stop_time']
+            else:
+                params['latest'] = latest
+
+            if 'start_row' in observation:
+                params['earliest'] = observation['start_time']
+            else:
+                params['earliest'] = earliest
                     
             obs = self.strset.observation_add ( observation['id'] , "planck_exchange", Params(params) )
 
@@ -481,31 +506,48 @@ class ToastConfig(object):
 
             for ix, exchange_folder in enumerate(self.exchange_folder):
                 eff_files = OrderedDict()
-                for eff_od in eff_ods:
-                    eff_files[ find_EFF(exchange_folder, eff_od, self.f.freq, self.efftype) ] = True
-                eff_files = eff_files.keys()
+                for eff_od, oddict in eff_ods.items():
+                    path = find_EFF(exchange_folder, eff_od, self.f.freq, self.efftype)
+                    oddict['path'] = path
                     
                 for ch in self.channels:
-                    for i, file_path in enumerate(eff_files):
-                        eff_od = get_eff_od(file_path)
+                    for i, oddict in enumerate(eff_ods.values()):
+                        eff_od = oddict['eff_od']
+                        file_path = oddict['path']
                         # Add TODs for this stream
                         params = {}
-                        params[ "flagmask" ] = self.flagmask
-                        params[ "obtmask" ] = self.obtmask
-                        params[ "hdu" ] = ch.eff_tag
-                        if self.config['pairflags']:
-                            params[ "pairflags" ] = 'TRUE'
+                        params[ 'start_time' ] = oddict[ 'start_time' ]
+                        params[ 'stop_time' ] = oddict[ 'stop_time' ]
+                        params[ 'rows' ] = oddict[ 'nrow' ]
+                        params[ 'flagmask' ] = self.flagmask
+                        params[ 'obtmask' ] = self.obtmask
+                        params[ 'hdu_name' ] = ch.eff_tag
+                        params[ 'hdu' ] = private.hdu_numbers[ ch.tag ]
+                        if self.config[ 'pairflags' ]:
+                            params[ 'pairflags' ] = 'TRUE'
+                            pairtag = get_pair( ch.tag )
+                            paireff_tag = get_pair( ch.eff_tag )
+                            print pairtag, paireff_tag
+                            if pairtag and paireff_tag:
+                                params[ 'pair_hdu_name' ] = paireff_tag
+                                params[ 'pair_hdu' ] = private.hdu_numbers[ pairtag ]
+                                
                         if self.remote_exchange_folder:
-                            params[ "path" ] = file_path.replace(self.exchange_folder[0], self.remote_exchange_folder[ix])
+                            params[ 'path' ] = file_path.replace(self.exchange_folder[0], self.remote_exchange_folder[ix])
                         else:
-                            params[ "path" ] = file_path.replace(self.exchange_folder[0], self.exchange_folder[ix])
+                            params[ 'path' ] = file_path.replace(self.exchange_folder[0], self.exchange_folder[ix])
+                            
                         tag = ''
                         if 'eff_od' in observation and observation['eff_od'] == eff_od:
+                            # Only use part of the EFF file due to break
                             if 'nrow' in observation:
                                 params['rows'] = observation['nrow']
+                                params['stop_time'] = observation['stop_time']
                                 tag = 'a'
                             if 'start_row' in observation:
                                 params['startrow'] = observation['start_row']
+                                params['start_time'] = observation['start_time']
+                                params['rows'] -= observation['start_row']
                                 tag = 'b'
                         name = "%s_%d%s" % (ch.tag, eff_od, tag)
                         if name not in self.tod_name_list[ix][ch.tag]:

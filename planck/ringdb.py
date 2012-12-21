@@ -178,15 +178,18 @@ class RingDB:
         if freq not in [30, 44, 70, 100]: raise Exception('EFF information not available for frequency: {}'.format( freq ))
         conn = sqlite3.connect( self.dbfile )
         c = conn.cursor()
-        eff_ods = {}
+        eff_ods = OrderedDict()
         for od in ods:
-            cmd = 'select eff_od from eff_files where freq == {} and start_od <= {} and stop_od >= {}'.format(freq, od, od)
+            cmd = 'select eff_od, start_time, stop_time, nrow from eff_files where freq == {} and start_od <= {} and stop_od >= {}'.format(freq, od, od)
             query = c.execute( cmd )
             for q in query:
-                eff_od = q[0]
-                if eff_od not in eff_ods: eff_ods[ eff_od ] = True
+                id = q[0]
+                if id not in eff_ods:
+                    eff_ods[ id ] = {
+                    'eff_od':q[0], 'start_time':q[1], 'stop_time':q[2], 'nrow':q[3]
+                    }
 
-        return sorted( eff_ods.keys() )
+        return eff_ods
 
 
     @property
