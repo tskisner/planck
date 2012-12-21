@@ -42,9 +42,9 @@ class RingDB:
             cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]} order by start_time'.format(
                 r=np.array(time_range)*2**-16 )
         elif lfi_ring_range != None:
-            cmd = 'select start_time, stop_time from rings where lfi_ring >= {r[0]} and lfi_ring <= {r[1]} order by start_time'.format( r=lfi_ring_range )
+            cmd = 'select start_time, stop_time from rings where LFI_ID >= {r[0]} and LFI_ID <= {r[1]} order by start_time'.format( r=lfi_ring_range )
         elif hfi_ring_range != None:
-            cmd = 'select start_time, stop_time from rings where hfi_ring >= {r[0]} and hfi_ring <= {r[1]} order by start_time'.format( r=hfi_ring_range )
+            cmd = 'select start_time, stop_time from rings where HFI_ID >= {r[0]} and HFI_ID <= {r[1]} order by start_time'.format( r=hfi_ring_range )
         elif od_range != None:
             cmd = 'select start_time, stop_time from rings where start_od >= {r[0]} and stop_od <= {r[1]} order by start_time'.format( r=od_range )
         else:

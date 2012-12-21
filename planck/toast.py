@@ -31,7 +31,7 @@ def find_AHF(dir, od):
 
 def find_EFF(dir, od, freq, efftype):
     """Searches the supplied directory for an Exchange File Format file with right frequency and type"""
-    pattern = '{}/{:04}/L{:03}-{:04}-{}-*fits'.format( dir, od, freq, od, efftype )
+    pattern = '{}/{:04}/?{:03}-{:04}-{}-*fits'.format( dir, od, freq, od, efftype )
     files = glob.glob( pattern )
     if len(files) == 0:
         raise Exception('Found no EFF file matching {}'.format( pattern ))
@@ -335,8 +335,15 @@ class ToastConfig(object):
         self.wobble = private.WOBBLE
         self.components = components
 
-        self.obtmask = obtmask or DEFAULT_OBTMASK[self.f.inst.name]
-        self.flagmask = flagmask or DEFAULT_FLAGMASK[self.f.inst.name]
+        if obtmask != None:
+            self.obtmask = obtmask
+        else:
+            self.obtmask = DEFAULT_OBTMASK[self.f.inst.name]
+            
+        if flagmask != None:
+            self.flagmask = flagmask
+        else:
+            self.flagmask = DEFAULT_FLAGMASK[self.f.inst.name]
 
         self.calibration_file = calibration_file
         self.dipole_removal = dipole_removal
@@ -529,7 +536,6 @@ class ToastConfig(object):
                             params[ 'pairflags' ] = 'TRUE'
                             pairtag = get_pair( ch.tag )
                             paireff_tag = get_pair( ch.eff_tag )
-                            print pairtag, paireff_tag
                             if pairtag and paireff_tag:
                                 params[ 'pair_hdu_name' ] = paireff_tag
                                 params[ 'pair_hdu' ] = private.hdu_numbers[ pairtag ]
