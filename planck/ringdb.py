@@ -39,7 +39,8 @@ class RingDB:
         if time_range != None:
             cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]} order by start_time'.format( r=time_range )
         elif click_range != None:
-            cmd = 'select start_time, stop_time from rings where start_click >= {r[0]} and stop_click <= {r[1]} order by start_time'.format( r=click_range )
+            cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]} order by start_time'.format(
+                r=np.array(time_range)*2**-16 )
         elif lfi_ring_range != None:
             cmd = 'select start_time, stop_time from rings where lfi_ring >= {r[0]} and lfi_ring <= {r[1]} order by start_time'.format( r=lfi_ring_range )
         elif hfi_ring_range != None:
@@ -145,6 +146,57 @@ class RingDB:
                     if interval['start_time'] < observation['stop_time'] and interval['stop_time'] > observation['start_time']:
                         intervals.append( interval )
                 observation['intervals'] = intervals
+
+
+    def exclude_od( self, od ):
+        """Remove intervals that overlap with given od from self.observations and self.intervals"""
+        self.exclude( od=od )
+
+
+    def exclude_ring( self, ring ):
+        """Remove intervals that overlap with given ESA ring from self.observations and self.intervals"""
+        self.exclude( ring=ring )
+
+
+    def exclude( self, od=None, ring=None ):
+
+        if od:
+            key = 'od'
+            value = od
+        elif ring:
+            key = 'ring'
+            value = ring
+        else:
+            raise Exception('Must specify od or ring to exclude')
+
+        # self.observations
+
+        iobs = 0
+        while iobs < len(self.observations):
+            observation = self.observations[iobs]
+            iint = 0
+            while iint < len(observation['intervals']):
+                interval = observation['intervals'][iint]
+                if interval[key] == value:
+                    del observation['intervals'][iint]
+                else:
+                    iint += 1
+
+            if len(observation['intervals']) == 0:
+                del self.observations[iobs]
+            else:
+                iobs += 1
+
+        # self.intervals
+
+        iint = 0
+        while iint < len(self.intervals):
+            interval = self.intervals[iint]
+            if interval[key] == value:
+                del self.intervals[iint]
+            else:
+                iint += 1
+                    
 
     @property
     def observations(self):

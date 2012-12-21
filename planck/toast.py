@@ -166,6 +166,8 @@ class ToastConfig(object):
         self.ringdb = RingDB( ringdb, self.f.freq, time_range=time_range, click_range=click_range, lfi_ring_range=lfi_ring_range, hfi_ring_range=hfi_ring_range, od_range=od_range,
                               use_SCM=use_SCM, use_HCM=use_HCM, use_OCM=use_OCM)
         self.ringdb.apply_breaks()
+        for od in private.bad_ods:
+            self.ringdb.exclude_od( od )
         if not os.path.isfile( fpdb ):
             raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
         self.fpdb = fpdb
@@ -481,7 +483,7 @@ class ToastConfig(object):
                 earliest = min( earliest, oddict['start_time'] )
                 latest = max( latest, oddict['stop_time'] )
                 eff_files[ find_EFF(self.exchange_folder[0], eff_od, self.f.freq, self.efftype) ] = True
-            print eff_files
+            print eff_files.keys()
             eff_files = eff_files.keys()
             for i, eff in enumerate( eff_files ):
                 if self.remote_exchange_folder:
@@ -772,8 +774,9 @@ if __name__ == '__main__':
 
     #conf = ToastConfig([740, 760], 30, nside=1024, ordering='RING', coord='E', efftype='R', output_xml='test_30_default.xml')
     conf = ToastConfig( 'db.db', 'LFI_RIMO_18092012_FFP6_v1_PTCOR6_hornpnt.fits',
-                        od_range=[98,98], channels=['LFI28M'], ahf_folder='AHF', exchange_folder='EFF',
+                        od_range=[191,192], channels=['LFI28M'], ahf_folder='AHF', exchange_folder='EFF',
                         noise_tod=True, eff_is_for_flags=False)
+    conf.ringdb.exclude_od( 191 )
     conf.run()
 
 #    # LFI run with noise simulation and real data flags
