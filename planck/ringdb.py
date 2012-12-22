@@ -147,6 +147,12 @@ class RingDB:
                         intervals.append( interval )
                 observation['intervals'] = intervals
 
+        # Ensure detector intervals get rebuilt
+        try:
+            del self._detector_intervals
+        except:
+            pass
+
 
     def exclude_od( self, od ):
         """Remove intervals that overlap with given od from self.observations and self.intervals"""
@@ -160,14 +166,36 @@ class RingDB:
 
     def exclude( self, od=None, ring=None ):
 
-        if od:
+        if od != None:
+            if ring != None:
+                raise Exception('Cannot exclude rings and ODs at the same time')
             key = 'od'
             value = od
-        elif ring:
+            print 'Excluding OD == {}'.format(od)
+        elif ring != None:
             key = 'ring'
             value = ring
+            print 'Excluding ring == {}'.format(od)
         else:
             raise Exception('Must specify od or ring to exclude')
+
+        # enforce the values to be in a list
+
+        values = []
+        if isinstance(value, str):
+            values.append( value )
+        else:
+            try:
+                for v in value:
+                    values.append( v )
+            except:
+                values.append( value )
+
+        for v in values:
+            if key == 'od' and not isinstance(v, int):
+                raise Exception('Excluded ODs must have integer IDs: {}'.format(v))
+            if key == 'ring' and not isinstance(v, str):
+                raise Exception('Excluded rings must have string IDs: {}'.format(v))
 
         # self.observations
 
@@ -177,7 +205,7 @@ class RingDB:
             iint = 0
             while iint < len(observation['intervals']):
                 interval = observation['intervals'][iint]
-                if interval[key] == value:
+                if interval[key] in values:
                     del observation['intervals'][iint]
                 else:
                     iint += 1
@@ -192,7 +220,7 @@ class RingDB:
         iint = 0
         while iint < len(self.intervals):
             interval = self.intervals[iint]
-            if interval[key] == value:
+            if interval[key] in values:
                 del self.intervals[iint]
             else:
                 iint += 1
@@ -301,10 +329,16 @@ class RingDB:
             # discard detector intervals without overlap with split intervals
 
             i = 0
+            j = 0
             while i < len(self._detector_intervals):
-                overlaps = False
-                for interval in self._intervals:
-                    if interval['stop_time'] >= self._detector_intervals[i]['start_time'] and interval['start_time'] <= self._detector_intervals[i]['stop_time']:
+                while j < len( self.intervals ):
+                    interval = self.intervals[j]
+                    if interval['stop_time'] < self._detector_intervals[i]['start_time']:
+                        j += 1
+                    elif interval['start_time'] > self._detector_intervals[i]['stop_time']:
+                        overlaps = False
+                        break
+                    else:
                         overlaps = True
                         break
                 if overlaps:
