@@ -419,6 +419,9 @@ class ToastConfig(object):
         if self.ptcorfile:
             teleparams['ptcorfile'] = self.ptcorfile
 
+        if not self.stokes_norm:
+            teleparams['stokesnorm'] = 'FALSE'
+
         if self.deaberrate != None:
             if self.deaberrate:
                 teleparams['deaberrate'] = 'TRUE'
