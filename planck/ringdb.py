@@ -63,8 +63,16 @@ class RingDB:
         """Breaks the observations and intervals according the the eff_breaks table"""
         conn = sqlite3.connect( self.dbfile )
         c = conn.cursor()
-        cmd = 'select eff_od, start_time, stop_time, start_row, stop_row, start_od, stop_od from eff_breaks where freq == {} and start_time < {} and stop_time > {}'.format(
-            self.freq, self.stop, self.start)
+
+        if self.freq < 100:
+            freq = self.freq
+        else:
+            freq = 100
+            
+        cmd = 'select eff_od, start_time, stop_time, start_row, stop_row, start_od, stop_od ' \
+              'from eff_breaks where freq == {} and start_time < {} and stop_time > {}'.format(
+            freq, self.stop, self.start)
+            
         query = c.execute( cmd )
         for q in query:
             eff_od, start_time, stop_time, start_row, stop_row, start_od, stop_od = q
