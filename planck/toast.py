@@ -494,6 +494,11 @@ class ToastConfig(object):
 
             eff_files = OrderedDict()
             eff_ods = self.ringdb.get_eff_ods(observation['ods']) # dictionary of dictionaries
+            print 'Observation {} ods: '.format(observation['id']),
+            for od in observation['ods']: print ' {}'.format(od),
+            print ' EFF ods: ',
+            for eff_od in eff_ods.keys(): print ' {}'.format(eff_od),
+            print
             earliest = 1e30
             latest = -1e30
             for eff_od, oddict in eff_ods.items():
@@ -684,8 +689,10 @@ class ToastConfig(object):
             if ( self.sum_diff ):
                 pix, first, second = pairsplit(ch.tag)
                 if ( first != "" ):
-                    self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD" % ( pix+first, pix+second) } ) )
-                    self.strm["diff_" + pix] = self.strset.stream_add ( "diff_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,SUB" % ( pix+first, pix+second) } ) )
+                    if 'I' in self.components:
+                        self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSH:$0.5,MUL" % ( pix+first, pix+second) } ) )
+                    if 'QU' in self.components:
+                        self.strm["diff_" + pix] = self.strset.stream_add ( "diff_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,SUB,PUSH:$0.5,MUL" % ( pix+first, pix+second) } ) )
 
 
     def add_eff_tods(self):
@@ -749,14 +756,14 @@ class ToastConfig(object):
                         "start" : self.strset.observations()[0].start(),
                         "stop" : self.strset.observations()[-1].stop(),
                         "path": self.fpdb,
-                        "detector" : pix + "_sum"
+                        "detector" : pix + "sum"
                         }))
                     noise = self.strset.noise_add ( "noise_" + pix + "_diff", "native", Params() )
                     wp = noise.psd_add ( "psd", "planck_rimo", Params( { 
                         "start" : self.strset.observations()[0].start(),
                         "stop" : self.strset.observations()[-1].stop(),
                         "path": self.fpdb,
-                        "detector" : pix + "_diff"
+                        "detector" : pix + "dif"
                         }))
 
 
@@ -765,6 +772,8 @@ class ToastConfig(object):
         params = ParMap()
         params[ "focalplane" ] = self.conf.telescopes()[0].focalplanes()[0].name()
         for ch in self.channels:
+            if ( self.sum_diff ) and ( ch.tag[-1] in 'Sb' ): continue
+
             pix, first, second = pairsplit(ch.tag)
             if ( self.sum_diff and ( first != "" ) ):
                 # we have the first detector of a pair, and want the sum/diff
