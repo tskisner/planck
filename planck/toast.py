@@ -777,14 +777,16 @@ class ToastConfig(object):
             pix, first, second = pairsplit(ch.tag)
             if ( self.sum_diff and ( first != "" ) ):
                 # we have the first detector of a pair, and want the sum/diff
-                params[ "detector" ] = pix + "_sum"
-                params[ "stream" ] = "/planck/%s/sum_%s" % (self.f.inst.name, pix)
-                params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, pix + "_sum")
-                telescope.channel_add ( pix + "_sum", "native", params )
-                params[ "detector" ] = pix + "_diff"
-                params[ "stream" ] = "/planck/%s/diff_%s" % (self.f.inst.name, pix)
-                params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, pix + "_diff")
-                telescope.channel_add ( pix + "_diff", "native", params )
+                if 'I' in self.components:
+                    params[ "detector" ] = pix + "_sum"
+                    params[ "stream" ] = "/planck/%s/sum_%s" % (self.f.inst.name, pix)
+                    params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, pix + "_sum")
+                    telescope.channel_add ( pix + "_sum", "native", params )
+                if 'QU' in self.components:
+                    params[ "detector" ] = pix + "_diff"
+                    params[ "stream" ] = "/planck/%s/diff_%s" % (self.f.inst.name, pix)
+                    params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, pix + "_diff")
+                    telescope.channel_add ( pix + "_diff", "native", params )
             else:
                 # we have a spiderweb or are not doing sum/diff
                 params[ "detector" ] = ch.tag
