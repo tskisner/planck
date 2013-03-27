@@ -36,17 +36,21 @@ class RingDB:
 
         cmd = None
 
+        if freq < 100:
+            extra = ''
+        else:
+            extra = ' AND start_time >= 1628777816.9397 AND stop_time <= 1705157618.21449'
+
         if time_range != None:
-            cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]} order by start_time'.format( r=time_range )
+            cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]}{e} order by start_time'.format( r=time_range, e=extra )
         elif click_range != None:
-            cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]} order by start_time'.format(
-                r=np.array(time_range)*2**-16 )
+            cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]}{e} order by start_time'.format( r=np.array(time_range)*2**-16, e=extra )
         elif lfi_ring_range != None:
-            cmd = 'select start_time, stop_time from rings where LFI_ID >= {r[0]} and LFI_ID <= {r[1]} order by start_time'.format( r=lfi_ring_range )
+            cmd = 'select start_time, stop_time from rings where LFI_ID >= {r[0]} and LFI_ID <= {r[1]}{e} order by start_time'.format( r=lfi_ring_range, e=extra )
         elif hfi_ring_range != None:
-            cmd = 'select start_time, stop_time from rings where HFI_ID >= {r[0]} and HFI_ID <= {r[1]} order by start_time'.format( r=hfi_ring_range )
+            cmd = 'select start_time, stop_time from rings where HFI_ID >= {r[0]} and HFI_ID <= {r[1]}{e} order by start_time'.format( r=hfi_ring_range, e=extra )
         elif od_range != None:
-            cmd = 'select start_time, stop_time from rings where start_od >= {r[0]} and stop_od <= {r[1]} order by start_time'.format( r=od_range )
+            cmd = 'select start_time, stop_time from rings where start_od >= {r[0]} and stop_od <= {r[1]}{e} order by start_time'.format( r=od_range, e=extra )
         else:
             print 'Warning: No range specified, mapping the entire database'
             cmd = 'select start_time, stop_time from rings order by start_time'

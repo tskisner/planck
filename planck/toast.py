@@ -670,9 +670,9 @@ class ToastConfig(object):
             if (not self.calibration_file is None):
                 self.strm["cal_" + ch.tag] = self.strset.stream_add( "cal_" + ch.tag, "planck_cal", Params( {"hdu":ch.tag, "path":self.calibration_file } ) )
                 stack_elements.append("PUSHDATA:cal_" + ch.tag + ",MUL")
-
+            
             # dipole subtract
-            if self.dipole_removal:
+            if self.dipole_removal and not self.sum_diff:
                 self.strm["dipole_" + ch.tag] = self.strset.stream_add( "dipole_" + ch.tag, "dipole", Params( {"channel":ch.tag, "coord":"E"} ) )
                 stack_elements.append("PUSHDATA:dipole_" + ch.tag + ",SUB")
 
@@ -690,7 +690,11 @@ class ToastConfig(object):
                 pix, first, second = pairsplit(ch.tag)
                 if ( first != "" ):
                     if 'I' in self.components:
-                        self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSH:$0.5,MUL" % ( pix+first, pix+second) } ) )
+                        if self.dipole_removal:
+                            self.strm["dipole_" + pix] = self.strset.stream_add( "dipole_" + pix, "dipole", Params( {"channel":pix+'_sum', "coord":"E"} ) )
+                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSH:$0.5,MUL,PUSHDATA:dipole_%s,SUB" % ( pix+first, pix+second, pix) } ) )
+                        else:
+                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSH:$0.5,MUL" % ( pix+first, pix+second) } ) )
                     if 'QU' in self.components:
                         self.strm["diff_" + pix] = self.strset.stream_add ( "diff_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,SUB,PUSH:$0.5,MUL" % ( pix+first, pix+second) } ) )
 
