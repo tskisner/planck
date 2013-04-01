@@ -171,6 +171,7 @@ class ToastConfig(object):
                               use_SCM=use_SCM, use_HCM=use_HCM, use_OCM=use_OCM)
         self.ringdb.apply_breaks()
         self.ringdb.exclude_od( private.bad_ods )
+        self.ringdb.exclude_ring( private.bad_rings )
         if not os.path.isfile( fpdb ):
             raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
         self.fpdb = fpdb
