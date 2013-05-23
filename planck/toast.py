@@ -318,7 +318,9 @@ class ToastConfig(object):
         if efftype is None:
             self.efftype ='R'
             if self.f.inst.name == 'LFI' and (not calibration_file is None):
-                efftype ='C'
+                self.efftype ='C'
+        else:
+            self.efftype = efftype
 
         if not os.path.isdir(str(ahf_folder)):
             raise Exception('No such AHF folder: {}'.format( str(ahf_folder) ) )

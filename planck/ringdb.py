@@ -39,7 +39,7 @@ class RingDB:
         if freq < 100:
             extra = ''
         else:
-            extra = ' AND start_time >= 1628777816.9397 AND stop_time <= 1705157618.21449'
+            extra = ' AND start_time >= 1628777500 AND stop_time <= 1705157700'
 
         if time_range != None:
             cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]}{e} order by start_time'.format( r=time_range, e=extra )
