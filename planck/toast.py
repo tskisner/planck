@@ -95,7 +95,7 @@ class ToastConfig(object):
     def __init__(self, ringdb, fpdb, 
                  time_range=None, click_range=None, lfi_ring_range=None, hfi_ring_range=None, od_range=None,
                  # Detector information
-                 channels=None, extend_857=False,
+                 channels=None, extend_857=True,
                  psd=None,
                  output_xml='toastrun.xml', log_level=l.INFO,
                  # Map params
