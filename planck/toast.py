@@ -328,7 +328,7 @@ class ToastConfig(object):
         self.remote_ahf_folder = remote_ahf_folder
         
         if exchange_folder:
-            if isinstance(exchange_folder, str):
+            if isinstance(exchange_folder, basestring):
                 exchange_folder = [exchange_folder]
             for d in exchange_folder:
                 if not os.path.isdir(str(d)):
@@ -336,7 +336,7 @@ class ToastConfig(object):
         self.exchange_folder = exchange_folder
         
         if remote_exchange_folder:
-            if isinstance(remote_exchange_folder, str):
+            if isinstance(remote_exchange_folder, basestring):
                 remote_exchange_folder = [remote_exchange_folder]
         self.remote_exchange_folder = remote_exchange_folder
         
@@ -535,6 +535,8 @@ class ToastConfig(object):
                 eff_files = OrderedDict()
                 for eff_od, oddict in eff_ods.items():
                     path = find_EFF(exchange_folder, eff_od, self.f.freq, self.efftype)
+                    if self.remote_exchange_folder:
+                        path = path.replace(exchange_folder, self.remote_exchange_folder[ix])
                     oddict['path'] = path
                     
                 for ch in self.channels:
