@@ -172,6 +172,7 @@ class ToastConfig(object):
         self.ringdb.apply_breaks()
         self.ringdb.exclude_od( private.bad_ods )
         self.ringdb.exclude_ring( private.bad_rings )
+        self.observation_is_interval = observation_is_interval
         if not os.path.isfile( fpdb ):
             raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
         self.fpdb = fpdb
@@ -359,7 +360,7 @@ class ToastConfig(object):
         self.dipole_removal = dipole_removal
 
         if flag_HFI_bad_rings and not os.path.isfile(str(flag_HFI_bad_rings)):
-            raise Exception('Sorry, unable to open HFI bad ring list: {}'.format(str(flag_hfi_bad_rings)))
+            raise Exception('Sorry, unable to open HFI bad ring list: {}'.format(str(flag_HFI_bad_rings)))
         self.bad_rings = flag_HFI_bad_rings
 
         self.eff_is_for_flags = eff_is_for_flags
@@ -528,8 +529,9 @@ class ToastConfig(object):
                     
             obs = self.strset.observation_add ( observation['id'] , "planck_exchange", Params(params) )
 
-            for interval in observation['intervals']:
-                obs.interval_add( interval['id'], 'native', Params({'start':interval['start_time'], 'stop':interval['stop_time']}) )
+            if not self.observation_is_interval:
+                for interval in observation['intervals']:
+                    obs.interval_add( interval['id'], 'native', Params({'start':interval['start_time'], 'stop':interval['stop_time']}) )
 
             for ix, exchange_folder in enumerate(self.exchange_folder):
                 eff_files = OrderedDict()
