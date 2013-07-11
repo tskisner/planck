@@ -29,8 +29,6 @@ class RingDB:
         conn = sqlite3.connect( self.dbfile )
         c = conn.cursor()
 
-        # Convert the supplied range to canonical span definition
-
         # Perform the ring query here for all range types, even though it is
         # not strictly needed in all cases.
 
@@ -57,9 +55,14 @@ class RingDB:
             
         query = c.execute( cmd )
         self.rings = query.fetchall()
-        self.start = self.rings[0][0]
-        self.stop = self.rings[-1][-1]
-        self.range = [self.start, self.stop]
+        if len(self.rings) > 0:
+            self.start = self.rings[0][0]
+            self.stop = self.rings[-1][-1]
+            self.range = [self.start, self.stop]
+        else:
+            self.start = None
+            self.stop = None
+            self.range = None
 
 
 
