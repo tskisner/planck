@@ -562,10 +562,11 @@ class ToastConfig(object):
                                 params[ 'pair_hdu_name' ] = paireff_tag
                                 params[ 'pair_hdu' ] = private.hdu_numbers[ pairtag ]
                                 
-                        if self.remote_exchange_folder:
-                            params[ 'path' ] = file_path.replace(self.exchange_folder[0], self.remote_exchange_folder[ix])
-                        else:
-                            params[ 'path' ] = file_path.replace(self.exchange_folder[0], self.exchange_folder[ix])
+                        #if self.remote_exchange_folder:
+                        #    params[ 'path' ] = file_path.replace(self.exchange_folder[0], self.remote_exchange_folder[ix])
+                        #else:
+                        #    params[ 'path' ] = file_path.replace(self.exchange_folder[0], self.exchange_folder[ix])
+                        params[ 'path' ] = file_path
                             
                         tag = ''
                         if 'eff_od' in observation and observation['eff_od'] == eff_od:
