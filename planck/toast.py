@@ -111,6 +111,8 @@ class ToastConfig(object):
                  # pointing corrections
                  ptcorfile=None, no_wobble=False, wobble_high=False, deaberrate=True,
                  calibration_file=None, dipole_removal=False,
+                 # Baseline subtraction
+                 baseline_file=None, 
                  # Noise simulation
                  noise_tod=False, noise_tod_weight=None,
                  horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False,
@@ -136,6 +138,7 @@ class ToastConfig(object):
             eff_is_for_flags : only use Exchange data for flags
             remote_exchange_folder, remote_ahf_folder: they allow to run toast.py in one environment using ahf_folder and exchange_folder and then replace the path with the remote folders
             calibration_file: path to a fits calibration file, with first extension OBT, then one extension per channel with the calibration factors
+            baseline_file : path to a Madam or TOAST baseline file to subtract presolved baselines
             dipole_removal: dipole removal is performed ONLY if calibration is specified
             noise_tod: Add simulated noise TODs
             noise_tod_weight: scaling factor to apply to noise_tod
@@ -357,6 +360,7 @@ class ToastConfig(object):
             self.flagmask = DEFAULT_FLAGMASK[self.f.inst.name]
 
         self.calibration_file = calibration_file
+        self.baseline_file = baseline_file
         self.dipole_removal = dipole_removal
 
         if flag_HFI_bad_rings and not os.path.isfile(str(flag_HFI_bad_rings)):
@@ -605,7 +609,7 @@ class ToastConfig(object):
                 noisename = "/planck/" + self.f.inst.name + "/noise_" + ch.tag
                 self.strm["simnoise_" + ch.tag] = self.strset.stream_add( "simnoise_" + ch.tag, "native", Params( ) )
                 suffix = ''
-                if self.noise_tod_weight and self.noise_tod_weight != 1:
+                if self.noise_tod_weight != None and self.noise_tod_weight != 1:
                     suffix += ',PUSH:$' + strconv(self.noise_tod_weight) + ',MUL'
                 stack_elements.append( "PUSH:simnoise_" + ch.tag + suffix)
                 # one noise tod per pointing period
@@ -678,6 +682,11 @@ class ToastConfig(object):
             if (not self.calibration_file is None):
                 self.strm["cal_" + ch.tag] = self.strset.stream_add( "cal_" + ch.tag, "planck_cal", Params( {"hdu":ch.tag, "path":self.calibration_file } ) )
                 stack_elements.append("PUSHDATA:cal_" + ch.tag + ",MUL")
+            
+            # add baseline stream
+            if (not self.baseline_file is None):
+                self.strm["baseline_" + ch.tag] = self.strset.stream_add( "baseline_" + ch.tag, "baseline", Params( {"row":-1, "rowname":ch.tag, "path":self.baseline_file.replace('CHANNEL',ch.tag) } ) )
+                stack_elements.append("PUSHDATA:baseline_" + ch.tag + ",SUB")
             
             # dipole subtract
             if self.dipole_removal and not self.sum_diff:
