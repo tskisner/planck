@@ -96,7 +96,7 @@ class ToastConfig(object):
                  time_range=None, click_range=None, lfi_ring_range=None, hfi_ring_range=None, od_range=None,
                  # Detector information
                  channels=None, extend_857=True,
-                 psd=None,
+                 psd=None, channel_psd=None, simu_psd=None,
                  output_xml='toastrun.xml', log_level=l.INFO,
                  # Map params
                  nside=1024, ordering='RING', coord='E', outmap='outmap.fits', components='IQU',
@@ -143,7 +143,9 @@ class ToastConfig(object):
             noise_tod: Add simulated noise TODs
             noise_tod_weight: scaling factor to apply to noise_tod
             flag_HFI_bad_rings: If a valid file, use that as input.
-            psd : templated name of an ASCII PSD files. Tag CHANNEL will be replaced with the appropriate channel identifier.
+            psd : templated name of ASCII or FITS PSD files. Tag CHANNEL will be replaced with the appropriate channel identifier.
+            channel_psd : templated name of PSD file to link to the channel information and supply to client codes
+            simu_psd : templated name of PSD file to draw random realizations from when simulating noise
             horn_noise_tod : False
             horn_noise_weight : None
             horn_noise_psd : templated name of an ASCII PSD files. Tag HORN will be replaced with the appropriate identifier.
@@ -200,7 +202,19 @@ class ToastConfig(object):
         self.deaberrate = deaberrate
         self.noise_tod = noise_tod
         self.noise_tod_weight = noise_tod_weight
+
         self.psd = psd
+        if channel_psd == None:
+            self.channel_psd = psd
+        else:
+            self.channel_psd = channel_psd
+        if simu_psd == None:
+            self.simu_psd = psd
+        else:
+            self.simu_psd = simu_psd
+        if self.channel_psd == None or self.channel_psd.lower() == 'rimo': self.channel_psd = 'RIMO'
+        if self.simu_psd == None or self.simu_psd.lower() == 'rimo': self.simu_psd = 'RIMO'
+
         self.horn_noise_tod = horn_noise_tod
         self.horn_noise_weight = horn_noise_weight
         self.horn_noise_psd = horn_noise_psd
@@ -606,7 +620,10 @@ class ToastConfig(object):
             if self.noise_tod:
                 rngstream = self.rngorder[ ch.tag ] * 100000
 
-                noisename = "/planck/" + self.f.inst.name + "/noise_" + ch.tag
+                if self.channel_psd != self.simu_psd:
+                    noisename = "/planck/" + self.f.inst.name + "/noise_simu_" + ch.tag
+                else:
+                    noisename = "/planck/" + self.f.inst.name + "/noise_" + ch.tag
                 self.strm["simnoise_" + ch.tag] = self.strset.stream_add( "simnoise_" + ch.tag, "native", Params( ) )
                 suffix = ''
                 if self.noise_tod_weight != None and self.noise_tod_weight != 1:
@@ -686,7 +703,7 @@ class ToastConfig(object):
             # add baseline stream
             if (not self.baseline_file is None):
                 self.strm["baseline_" + ch.tag] = self.strset.stream_add( "baseline_" + ch.tag, "baseline", Params( {"row":-1, "rowname":ch.tag, "path":self.baseline_file.replace('CHANNEL',ch.tag) } ) )
-                stack_elements.append("PUSHDATA:baseline_" + ch.tag + ",SUB")
+                stack_elements.append("PUSH:baseline_" + ch.tag + ",SUB")
             
             # dipole subtract
             if self.dipole_removal and not self.sum_diff:
@@ -740,23 +757,40 @@ class ToastConfig(object):
         # Add RIMO noise model (LFI) or mission average PSD (HFI)
 
         for ch in self.channels:
-            noise = self.strset.noise_add ( "noise_" + ch.tag, "native", Params() )
+
+            if self.channel_psd != self.simu_psd: 
+                noises = [self.strset.noise_add ( "noise_channel_" + ch.tag, "native", Params() )]
+                noises.append( self.strset.noise_add ( "noise_simu_" + ch.tag, "native", Params() ) )
+                psds = [self.channel_psd]
+                psds.append( self.simu_psd )
+            else:
+                noises = [self.strset.noise_add ( "noise_" + ch.tag, "native", Params() )]
+                psds = [self.channel_psd]
 
             # add PSD
-            if self.psd:                
-                psdname = self.psd.replace('CHANNEL', ch.tag)
-                noise.psd_add ( "psd", "ascii", Params({
-                    "start" : self.strset.observations()[0].start(),
-                    "stop" : self.strset.observations()[-1].stop(),
-                    "path": psdname
-                    }))
-            else:
-                noise.psd_add ( "psd", "planck_rimo", Params({
-                    "start" : self.strset.observations()[0].start(),
-                    "stop" : self.strset.observations()[-1].stop(),
-                    "path": self.fpdb,
-                    "detector": ch.tag
-                    }))
+            for noise, psd in zip( noises, psds ):
+                if psd == None or psd.upper() == 'RIMO':
+                    noise.psd_add ( "psd", "planck_rimo", Params({
+                                "start" : self.strset.observations()[0].start(),
+                                "stop" : self.strset.observations()[-1].stop(),
+                                "path": self.fpdb,
+                                "detector": ch.tag
+                                }))
+                else:
+                    psdname = psd.replace('CHANNEL', ch.tag)
+                    if 'fits' in psdname:
+                        noise.psd_add ( "psd", "fits", Params({
+                                    "start" : self.strset.observations()[0].start(),
+                                    "stop" : self.strset.observations()[-1].stop(),
+                                    "path": psdname
+                                    }))
+                    else:
+                        noise.psd_add ( "psd", "ascii", Params({
+                                    "start" : self.strset.observations()[0].start(),
+                                    "stop" : self.strset.observations()[-1].stop(),
+                                    "path": psdname
+                                    }))
+
             # add horn noise psd
             if self.horn_noise_tod and ch.tag[-1] in 'aM':
                 horn = ch.tag[:-1]
@@ -812,7 +846,10 @@ class ToastConfig(object):
                 # we have a spiderweb or are not doing sum/diff
                 params[ "detector" ] = ch.tag
                 params[ "stream" ] = "/planck/%s/stack_%s" % (self.f.inst.name, ch.tag)
-                params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, ch.tag)
+                if self.channel_psd != self.simu_psd:
+                    params[ "noise" ] = "/planck/%s/noise_channel_%s" % (self.f.inst.name, ch.tag)
+                else:
+                    params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, ch.tag)
                 telescope.channel_add ( ch.tag, "native", params )
 
 
