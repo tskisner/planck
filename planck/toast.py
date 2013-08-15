@@ -168,6 +168,9 @@ class ToastConfig(object):
             dictionaries before running .run()
         """
         l.root.level = log_level
+        self.extend_857 = extend_857
+        if self.extend_857:
+            if '857-4' in EXCLUDED_CH: EXCLUDED_CH.remove('857-4')
         self.channels = parse_channels(channels)
         self.f = self.channels[0].f
         if not os.path.isfile( ringdb ):
@@ -181,9 +184,6 @@ class ToastConfig(object):
         if not os.path.isfile( fpdb ):
             raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
         self.fpdb = fpdb
-        self.extend_857 = extend_857
-        if self.extend_857:
-            if '857-4' in EXCLUDED_CH: EXCLUDED_CH.remove('857-4')
         self.nside = nside
         self.coord = coord
         self.ordering = ordering
@@ -631,14 +631,32 @@ class ToastConfig(object):
                 stack_elements.append( "PUSH:simnoise_" + ch.tag + suffix)
                 # one noise tod per pointing period
                 # Must retrieve all pp_boundaries to properly increment the stream index
+                # From now on, we always combine HCM and SCM into a single noise tod object
+                hcm = None
                 for interval in self.ringdb.detector_intervals:
-                    self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, interval['index']), "sim_noise", Params({
-                           "noise" : noisename,
-                           "base" : basename,
-                           "start" : interval['start_time'],
-                           "stop" : interval['stop_time'],
-                           "offset" : rngstream + interval['index']
-                    }))
+                    if 'H' in interval['id']:
+                        if hcm != None or interval == self.ringdb.detector_intervals[-1]:
+                            if hcm == None: hcm = interval
+                            # write out orphan HCM
+                            self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, hcm['index']), "sim_noise", Params({
+                                        "noise" : noisename,
+                                        "base" : basename,
+                                        "start" : hcm['start_time'],
+                                        "stop" : hcm['stop_time'],
+                                        "offset" : rngstream + hcm['index']
+                                    }))
+                            hcm = None
+                        hcm = interval
+                    else:
+                        if hcm == None: hcm = interval
+                        self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, interval['index']), "sim_noise", Params({
+                                    "noise" : noisename,
+                                    "base" : basename,
+                                    "start" : hcm['start_time'],
+                                    "stop" : interval['stop_time'],
+                                    "offset" : rngstream + interval['index']
+                                    }))
+                        hcm = None
 
             # add simulated noise stream common to each horn
             if self.horn_noise_tod and ch.tag[-1] in 'MSab':
@@ -779,11 +797,21 @@ class ToastConfig(object):
                 else:
                     psdname = psd.replace('CHANNEL', ch.tag)
                     if 'fits' in psdname:
-                        noise.psd_add ( "psd", "fits", Params({
-                                    "start" : self.strset.observations()[0].start(),
-                                    "stop" : self.strset.observations()[-1].stop(),
-                                    "path": psdname
-                                    }))
+                        if False:
+                            # One PSD for the entire span
+                            noise.psd_add ( "psd", "fits", Params({
+                                        "start" : self.strset.observations()[0].start(),
+                                        "stop" : self.strset.observations()[-1].stop(),
+                                        "path": psdname
+                                        }))
+                        else:
+                            # Separate PSD object for every observation
+                            for obs in self.strset.observations():
+                                noise.psd_add ( "psd", "fits", Params({
+                                            "start" : obs.start(),
+                                            "stop" : obs.stop(),
+                                            "path": psdname
+                                            }))
                     else:
                         noise.psd_add ( "psd", "ascii", Params({
                                     "start" : self.strset.observations()[0].start(),
