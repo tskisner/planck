@@ -99,7 +99,9 @@ class ToastConfig(object):
                  psd=None, channel_psd=None, simu_psd=None,
                  output_xml='toastrun.xml', log_level=l.INFO,
                  # Map params
-                 nside=1024, ordering='RING', coord='E', outmap='outmap.fits', components='IQU',
+                 nside=1024, ordering='RING', coord='E', components='IQU',
+                 nside_des=None,
+                 iqus=False, iqus_des=False,
                  # Data directories
                  exchange_folder=None, ahf_folder=None,
                  remote_exchange_folder=None, remote_ahf_folder=None,
@@ -160,6 +162,10 @@ class ToastConfig(object):
                           weight.
             sum_diff : If True, build a run containing sum and difference timestreams.
                        Implies stokes_norm=False
+            nside : Healpix NSIDE to use for primary sky representation (default = 1024)
+            nside_des : Healpix NSIDE to use for destriping sky representation (default same as nside)
+            iqus : If True, generate output map with one spurious map per horn (default False)
+            iqus_des : If True, destripe on a map with one spurious map per horn (default False)
 
             additional configuration options are available modifying:
             .config
@@ -185,9 +191,14 @@ class ToastConfig(object):
             raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
         self.fpdb = fpdb
         self.nside = nside
+        if ( nside_des == None ):
+            self.nside_des = nside
+        else:
+            self.nside_des = nside_des
         self.coord = coord
         self.ordering = ordering
-        self.outmap = outmap
+        self.iqus = iqus
+        self.iqus_des = iqus_des
         if channels == None: raise Exception('Must define which channels to include')
         self.output_xml = output_xml
         self.ptcorfile = ptcorfile
@@ -404,15 +415,30 @@ class ToastConfig(object):
           
         sky = self.conf.sky_add ( "sky", "native", ParMap() )
 
+        extra = 0
+        if ( self.iqus ):
+            extra = len ( group_by_horn ( self.channels ) )
+
         mapset = sky.mapset_add ( '_'.join(['healpix',self.components, self.ordering]), "healpix", 
             Params({
-                "path"  : self.outmap,
-                "fullsky"  : "TRUE",
                 "stokes"  : self.components,
                 "order"  : self.ordering,
                 "coord"  : self.coord,
                 "nside"  : str(self.nside),
-                "units"  : "micro-K"
+                "extra"  : str(extra)
+            }))
+
+        if ( self.nside != self.nside_des ):
+            extra = 0
+            if ( self.iqus ):
+                extra = len ( group_by_horn ( self.channels ) )
+            mapset_des = sky.mapset_add ( '_'.join(['destripe_healpix',self.components, self.ordering]), "healpix", 
+            Params({
+                "stokes"  : self.components,
+                "order"  : self.ordering,
+                "coord"  : self.coord,
+                "nside"  : str(self.nside_des),
+                "extra"  : str(extra)
             }))
 
         if self.no_wobble:
