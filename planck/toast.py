@@ -430,12 +430,15 @@ class ToastConfig(object):
             }))
 
         if ( self.nside != self.nside_des ):
+
+            des_sky = self.conf.sky_add ( "sky", "native", ParMap() )
+
             extra = 0
             if ( self.iqus_des ):
                 for key in group_by_horn ( self.channels ):
                     extra += 1
 
-            mapset_des = sky.mapset_add ( '_'.join(['destripe_healpix',self.components, self.ordering]), "healpix", 
+            mapset_des = des_sky.mapset_add ( '_'.join(['destripe_healpix',self.components, self.ordering]), "healpix", 
             Params({
                 "stokes"  : self.components,
                 "order"  : self.ordering,
