@@ -5,11 +5,11 @@ import os
 import exceptions
 import glob
 import sqlite3
-from ringdb import RingDB
+from planck.ringdb import RingDB
 from collections import OrderedDict
 
-import private
-from Planck import parse_channels, EXCLUDED_CH
+import planck.private as private
+from planck.Planck import parse_channels, EXCLUDED_CH, group_by_horn
 from collections import defaultdict
 
 import logging as l
@@ -417,7 +417,8 @@ class ToastConfig(object):
 
         extra = 0
         if ( self.iqus ):
-            extra = len ( group_by_horn ( self.channels ) )
+            for key in group_by_horn ( self.channels ):
+                extra += 1
 
         mapset = sky.mapset_add ( '_'.join(['healpix',self.components, self.ordering]), "healpix", 
             Params({
@@ -430,8 +431,10 @@ class ToastConfig(object):
 
         if ( self.nside != self.nside_des ):
             extra = 0
-            if ( self.iqus ):
-                extra = len ( group_by_horn ( self.channels ) )
+            if ( self.iqus_des ):
+                for key in group_by_horn ( self.channels ):
+                    extra += 1
+
             mapset_des = sky.mapset_add ( '_'.join(['destripe_healpix',self.components, self.ordering]), "healpix", 
             Params({
                 "stokes"  : self.components,
