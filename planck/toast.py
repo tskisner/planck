@@ -431,7 +431,7 @@ class ToastConfig(object):
 
         if ( self.nside != self.nside_des ):
 
-            des_sky = self.conf.sky_add ( "sky", "native", ParMap() )
+            des_sky = self.conf.sky_add ( "destripe_sky", "native", ParMap() )
 
             extra = 0
             if ( self.iqus_des ):
