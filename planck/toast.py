@@ -75,30 +75,32 @@ def pairsplit(det):
     return pix, first, second
 
 def hornindx( hornkey ):
-    if ( hornkey == "27" ):
+    if ( hornkey == 27 ):
         return 0
-    elif ( hornkey == "28" ):
+    elif ( hornkey == 28 ):
         return 1
-    elif ( hornkey == "24" ):
+    elif ( hornkey == 24 ):
         return 0
-    elif ( hornkey == "25" ):
+    elif ( hornkey == 25 ):
         return 1
-    elif ( hornkey == "26" ):
+    elif ( hornkey == 26 ):
         return 2
-    elif ( hornkey == "18" ):
+    elif ( hornkey == 18 ):
         return 0
-    elif ( hornkey == "19" ):
+    elif ( hornkey == 19 ):
         return 1
-    elif ( hornkey == "20" ):
+    elif ( hornkey == 20 ):
         return 2
-    elif ( hornkey == "21" ):
+    elif ( hornkey == 21 ):
         return 3
-    elif ( hornkey == "22" ):
+    elif ( hornkey == 22 ):
         return 4
-    elif ( hornkey == "23" ):
+    elif ( hornkey == 23 ):
         return 5
     else:
-        return int( hornkey[-1] ) - 1
+        hornst = str ( hornkey )
+        lastdigit = hornst[-1:]
+        return str( int ( lastdigit ) - 1 )
 
 
 def Params(dic=None):
@@ -445,7 +447,7 @@ class ToastConfig(object):
         hornmaps = 0
         hornlist = []        
         for ch in self.channels:
-            h = hornindx ( ch.horn() )
+            h = hornindx ( ch.horn )
             if h not in hornlist:
                 hornlist.append( h )
                 hornmaps += 1
@@ -519,7 +521,8 @@ class ToastConfig(object):
             Params(teleparams))
 
         if ( hornmaps > 0 ):
-            hornstr = ",".join( hornlist.sort() )
+            hornstrlist = [ str(x) for x in sorted ( hornlist ) ]
+            hornstr = ",".join( hornstrlist )
             fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb, "horns":hornstr}) )
         else:
             fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb}) )
