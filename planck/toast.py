@@ -74,6 +74,33 @@ def pairsplit(det):
         second = "S"
     return pix, first, second
 
+def hornindx( hornkey ):
+    if ( hornkey == "27" ):
+        return 0
+    elif ( hornkey == "28" ):
+        return 1
+    elif ( hornkey == "24" ):
+        return 0
+    elif ( hornkey == "25" ):
+        return 1
+    elif ( hornkey == "26" ):
+        return 2
+    elif ( hornkey == "18" ):
+        return 0
+    elif ( hornkey == "19" ):
+        return 1
+    elif ( hornkey == "20" ):
+        return 2
+    elif ( hornkey == "21" ):
+        return 3
+    elif ( hornkey == "22" ):
+        return 4
+    elif ( hornkey == "23" ):
+        return 5
+    else:
+        return int( hornkey[-1] ) - 1
+
+
 def Params(dic=None):
     """Creates a Toast ParMap from a python dictionary"""
     params = ParMap()
@@ -415,10 +442,17 @@ class ToastConfig(object):
           
         sky = self.conf.sky_add ( "sky", "native", ParMap() )
 
+        hornmaps = 0
+        hornlist = []        
+        for ch in self.channels:
+            h = hornindx ( ch.horn() )
+            if h not in hornlist:
+                hornlist.append( h )
+                hornmaps += 1
+
         extra = 0
         if ( self.iqus ):
-            for key in group_by_horn ( self.channels ):
-                extra += 1
+            extra = hornmaps
 
         mapset = sky.mapset_add ( '_'.join(['healpix',self.components, self.ordering]), "healpix", 
             Params({
@@ -435,8 +469,7 @@ class ToastConfig(object):
 
             extra = 0
             if ( self.iqus_des ):
-                for key in group_by_horn ( self.channels ):
-                    extra += 1
+                extra = hornmaps
 
             mapset_des = des_sky.mapset_add ( '_'.join(['destripe_healpix',self.components, self.ordering]), "healpix", 
             Params({
@@ -485,7 +518,11 @@ class ToastConfig(object):
         tele = self.conf.telescope_add ( "planck", "planck", 
             Params(teleparams))
 
-        fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb}) )
+        if ( hornmaps > 0 ):
+            hornstr = ",".join( hornlist.sort() )
+            fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb, "horns":hornstr}) )
+        else:
+            fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb}) )
 
         self.add_pointing(tele)
         self.add_observations(tele)
