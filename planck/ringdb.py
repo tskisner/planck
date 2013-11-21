@@ -60,6 +60,7 @@ class RingDB:
             self.stop = self.rings[-1][-1]
             self.range = [self.start, self.stop]
         else:
+            print 'WARNING: ringdb query returned an empty list of intervals. Failed query was {}'.format( cmd )
             self.start = None
             self.stop = None
             self.range = None
@@ -75,10 +76,14 @@ class RingDB:
             freq = self.freq
         else:
             freq = 100
-            
+
+        # Get breaks for the total time contained in the observations, not just the
+        # requested time span. TOAST does not accept observations with breaks, even
+        # if the intervals are continuous.
         cmd = 'select eff_od, start_time, stop_time, start_row, stop_row, start_od, stop_od ' \
               'from eff_breaks where freq == {} and start_time < {} and stop_time > {}'.format(
-            freq, self.stop, self.start)
+            freq, self.observations[-1]['stop_time'], self.observations[0]['start_time'])
+       #     freq, self.stop, self.start)
             
         query = c.execute( cmd )
         for q in query:
@@ -115,10 +120,11 @@ class RingDB:
             # Apply the breaks to self.observations, reset the interval lists to be populated later
             iobs = 0
             while iobs < len(self.observations):
-                observation = copy.deepcopy( self.observations[iobs] )
+                observation = self.observations[iobs] # Soft link
                 if observation['start_time'] < stop_time and observation['stop_time'] > start_time:
                     # Break this observation
                     print 'Breaking observation {}'.format(observation['id'])
+                    observation = copy.deepcopy( self.observations[iobs] ) # hard copy
                     if start_time <= observation['start_time'] and stop_time >= observation['stop_time']:
                         # observation is contained in the break
                         del self.observations[iobs]
@@ -152,7 +158,7 @@ class RingDB:
                         break
                 iobs += 1
                                 
-        # Now repopulate the empty interval lists
+        # Now re-populate the empty interval lists
 
         for observation in self.observations:
             if observation['intervals'] == None:
