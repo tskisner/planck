@@ -99,8 +99,10 @@ def hornindx( hornkey ):
         return 5
     else:
         hornst = str ( hornkey )
-        lastdigit = hornst[-1:]
-        return str( int ( lastdigit ) - 1 )
+        lastdigit = int( hornst[-1:] )
+        if hornst[:3] == '217': lastdigit -= 2 # Bundle SWBs into 2 virtual horns
+        if hornst[:3] == '353': lastdigit -= 1 # Bundle SWBs into one virtual horn
+        return str( lastdigit - 1 )
 
 
 def Params(dic=None):
@@ -445,16 +447,26 @@ class ToastConfig(object):
         sky = self.conf.sky_add ( "sky", "native", ParMap() )
 
         hornmaps = 0
-        hornlist = []        
+        hornlist = []
         for ch in self.channels:
+            if ch.tag[-1] not in 'MSab': continue # Only list polarized horns
             h = hornindx ( ch.horn )
             if h not in hornlist:
                 hornlist.append( h )
                 hornmaps += 1
 
+        # number of virtual horns for iqus mapmaking
+        ndet = len(self.channels)
+        nvhorn = {1:0, 2:1, 3:2, 4:3, 5:4, 6:5, 7:6, 8:7, 9:8, 10:9, 11:10, 12:11}[ndet]
+        nhorn = {30:2, 44:3, 70:6, 100:4, 143:4, 217:4, 353:4, 545:0, 857:0}[self.f.freq]
+
         extra = 0
         if ( self.iqus ):
-            extra = hornmaps
+            if self.iqus == 'full':
+                extra = nvhorn
+                hornlist = range(nvhorn)
+            else:
+                extra = nhorn # hornmaps
 
         mapset = sky.mapset_add ( '_'.join(['healpix',self.components, self.ordering]), "healpix", 
             Params({
@@ -470,8 +482,11 @@ class ToastConfig(object):
             des_sky = self.conf.sky_add ( "destripe_sky", "native", ParMap() )
 
             extra = 0
-            if ( self.iqus_des ):
-                extra = hornmaps
+            if self.iqus_des:
+                if self.iqus_des == 'full':
+                    extra = nvhorn
+                else:
+                    extra = nhorn # hornmaps
 
             mapset_des = des_sky.mapset_add ( '_'.join(['destripe_healpix',self.components, self.ordering]), "healpix", 
             Params({
@@ -523,9 +538,9 @@ class ToastConfig(object):
         if ( hornmaps > 0 ):
             hornstrlist = [ str(x) for x in sorted ( hornlist ) ]
             hornstr = ",".join( hornstrlist )
-            fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb, "horns":hornstr}) )
+            fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb, "freq":self.f.freq, "horns":hornstr}) )
         else:
-            fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb}) )
+            fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb, "freq":self.f.freq}) )
 
         self.add_pointing(tele)
         self.add_observations(tele)
@@ -828,9 +843,9 @@ class ToastConfig(object):
         for ix in range(len(self.exchange_folder)):
             # remove duplicate files on breaks
             for ch in self.channels:
-                for name in [n for n in self.tod_name_list[ix][ch.tag] if n.endswith('a')]:
+                for name in [n for n in self.tod_name_list[ix][ch.tag] if n.endswith(('a','b'))]:
                     try:
-                        delindex = self.tod_name_list[ix][ch.tag].index(name.rstrip('a'))
+                        delindex = self.tod_name_list[ix][ch.tag].index(name[:-1])
                         print('Removing %s because of breaks' % self.tod_name_list[ix][ch.tag][delindex])
                         del self.tod_name_list[ix][ch.tag][delindex]
                         del self.tod_par_list[ix][ch.tag][delindex]
