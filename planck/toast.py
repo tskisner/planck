@@ -464,7 +464,20 @@ class ToastConfig(object):
         if ( self.iqus ):
             if self.iqus == 'full':
                 extra = nvhorn
-                hornlist = range(nvhorn)
+                if self.f.freq == 30:
+                    hornlist = [0,1,6]
+                elif self.f.freq == 44:
+                    hornlist = [0,1,2,6,9]
+                elif self.f.freq == 100:
+                    hornlist = [0,1,2,3,6,7,9]
+                elif self.f.freq == 143:
+                    hornlist = [0,1,2,3,4,6,7,8,9,10]
+                elif self.f.freq == 545:
+                    hornlist = [0,6]
+                elif self.f.freq == 857:
+                    hornlist = [0,1,6]
+                else:
+                    hornlist = range(nvhorn)
             else:
                 extra = nhorn # hornmaps
 
@@ -535,7 +548,8 @@ class ToastConfig(object):
         tele = self.conf.telescope_add ( "planck", "planck", 
             Params(teleparams))
 
-        if ( hornmaps > 0 ):
+        #if ( hornmaps > 0 ):
+        if ( len(hornlist) > 0 ):
             hornstrlist = [ str(x) for x in sorted ( hornlist ) ]
             hornstr = ",".join( hornstrlist )
             fp = tele.focalplane_add ( "FP_%s" % self.f.inst.name, "planck_rimo", Params({"path":self.fpdb, "freq":self.f.freq, "horns":hornstr}) )
