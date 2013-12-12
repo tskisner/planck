@@ -100,8 +100,8 @@ def hornindx( hornkey ):
     else:
         hornst = str ( hornkey )
         lastdigit = int( hornst[-1:] )
-        if hornst[:3] == '217': lastdigit -= 2 # Bundle SWBs into 2 virtual horns
-        if hornst[:3] == '353': lastdigit -= 1 # Bundle SWBs into one virtual horn
+        if hornst[:3] == '217': lastdigit -= 4 # Bundle SWBs into 2 virtual horns
+        if hornst[:3] == '353': lastdigit -= 2 # Bundle SWBs into one virtual horn
         return str( lastdigit - 1 )
 
 
