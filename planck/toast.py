@@ -21,7 +21,7 @@ l.basicConfig(level=l.INFO)
 
 def find_AHF(dir, od):
     """Searches the supplied directory for an AHF file with velocity information appended"""
-    pattern = '{}/{:04}/vel_att_hist_high_*_{:04}_*fits'.format( dir, od, od )
+    pattern = '{}/{:04}/vel_att_hist_high_*{:04}*fits'.format( dir, od, od )
     files = glob.glob( pattern )
     if len(files) == 0:
         raise Exception('Found no AHF file matching {}'.format( pattern ))
@@ -717,6 +717,12 @@ class ToastConfig(object):
         for ch in self.channels:
             stack_elements = []
 
+            # Noise TOD oversample factors:
+            if self.f.freq < 400:
+                oversample = 2
+            else:
+                oversample = 4
+
             # add simulated noise stream
             if self.noise_tod:
                 rngstream = self.rngorder[ ch.tag ] * 100000
@@ -744,7 +750,8 @@ class ToastConfig(object):
                                         "base" : basename,
                                         "start" : hcm['start_time'],
                                         "stop" : hcm['stop_time'],
-                                        "offset" : rngstream + hcm['index']
+                                        "offset" : rngstream + hcm['index'],
+                                        "oversample" : oversample,
                                     }))
                             hcm = None
                         hcm = interval
@@ -755,7 +762,8 @@ class ToastConfig(object):
                                     "base" : basename,
                                     "start" : hcm['start_time'],
                                     "stop" : interval['stop_time'],
-                                    "offset" : rngstream + interval['index']
+                                    "offset" : rngstream + interval['index'],
+                                    "oversample" : oversample,
                                     }))
                         hcm = None
 
@@ -779,7 +787,8 @@ class ToastConfig(object):
                            "base" : basename,
                            "start" : pp_boundaries[0],
                            "stop" : pp_boundaries[1],
-                           "offset" : rngstream + interval['index']
+                           "offset" : rngstream + interval['index'],
+                           "oversample" : oversample,
                     }))
 
             # add the beam sky
