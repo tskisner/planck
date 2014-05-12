@@ -141,6 +141,7 @@ class ToastConfig(object):
                  # Flag selection
                  use_SCM=True, use_HCM=False, use_OCM=False,
                  obtmask=None, flagmask=None, flag_HFI_bad_rings=False,
+                 pairflags=None,
                  # pointing corrections
                  ptcorfile=None, no_wobble=False, wobble_high=False, deaberrate=True,
                  calibration_file=None, dipole_removal=False,
@@ -176,6 +177,7 @@ class ToastConfig(object):
             noise_tod: Add simulated noise TODs
             noise_tod_weight: scaling factor to apply to noise_tod
             flag_HFI_bad_rings: If a valid file, use that as input.
+            pairflags(None): Explicitly enable or disable symmetric flagging within horns. Default is LFI(True), HFI(False)
             psd : templated name of ASCII or FITS PSD files. Tag CHANNEL will be replaced with the appropriate channel identifier.
             channel_psd : templated name of PSD file to link to the channel information and supply to client codes
             simu_psd : templated name of PSD file to draw random realizations from when simulating noise
@@ -370,10 +372,10 @@ class ToastConfig(object):
             }
 
         self.config = {}
-        if self.f.inst.name == 'LFI':
-            self.config['pairflags'] = True
-        else:
+        if self.f.inst.name == 'HFI' and pairflags != True:
             self.config['pairflags'] = False
+        else:
+            self.config['pairflags'] = True
 
         if efftype is None:
             self.efftype ='R'
