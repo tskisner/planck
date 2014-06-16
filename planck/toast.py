@@ -152,8 +152,6 @@ class ToastConfig(object):
                  horn_noise_tod=None, horn_noise_weight=None, horn_noise_psd=None, observation_is_interval=False,
                  # Beamsky params
                  beamsky=None, beamsky_weight=None, interp_order=5,
-                 # Normalization
-                 stokes_norm=True,
                  sum_diff=False):
         """TOAST configuration:
 
@@ -191,13 +189,10 @@ class ToastConfig(object):
             beamsky : templated name of the beamsky files for OTF sky convolution. Tag CHANNEL will be replaced with the appropriate channel identifier.
             beamsky_weight : scaling factor to apply to the beamsky
             interp_order : beamsky interpolation order defines number of cartesian pixels to interpolate over
-            stokes_norm : If True (default), toast Stokes weights will be divided by the I
-                          weight.
             sum_diff : If True, build a run containing sum and difference timestreams.
-                       Implies stokes_norm=False
             nside : Healpix NSIDE to use for primary sky representation (default = 1024)
             nside_des : Healpix NSIDE to use for destriping sky representation (default same as nside)
-            iqus : If True, generate output map with one spurious map per horn (default False)
+            iqus : If True, generate output map with one spurious map per horn (default False). If 'full', additional spurious maps are added between horns.
             iqus_des : If True, destripe on a map with one spurious map per horn (default False)
 
             additional configuration options are available modifying:
@@ -239,10 +234,6 @@ class ToastConfig(object):
         self.no_wobble = no_wobble
         self.wobble_high = wobble_high
         self.sum_diff = sum_diff
-        if ( self.sum_diff ):
-            self.stokes_norm = False
-        else:
-            self.stokes_norm = stokes_norm
         self.deaberrate = deaberrate
         self.noise_tod = noise_tod
         self.noise_tod_weight = noise_tod_weight
@@ -537,9 +528,6 @@ class ToastConfig(object):
 
         if self.ptcorfile:
             teleparams['ptcorfile'] = self.ptcorfile
-
-        if not self.stokes_norm:
-            teleparams['stokesnorm'] = 'FALSE'
 
         if self.deaberrate != None:
             if self.deaberrate:

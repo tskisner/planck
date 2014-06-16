@@ -40,15 +40,60 @@ class RingDB:
             extra = ' AND start_time >= 1628777500 AND stop_time <= 1705157700'
 
         if time_range != None:
-            cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]}{e} order by start_time'.format( r=time_range, e=extra )
+            cmd = 'select start_time, stop_time from rings where ( '
+            try:
+                first = True
+                for r in time_range:
+                    if not first: cmd += ' OR '
+                    cmd += '(start_time >= {r[0]} AND stop_time <= {r[1]})'.format( r=r )
+                    first = False
+            except:
+                cmd += 'start_time >= {r[0]} AND stop_time <= {r[1]}'.format( r=time_range )
+            cmd += ' ) {e} order by start_time'.format( e=extra )
         elif click_range != None:
-            cmd = 'select start_time, stop_time from rings where start_time >= {r[0]} and stop_time <= {r[1]}{e} order by start_time'.format( r=np.array(time_range)*2**-16, e=extra )
+            cmd = 'select start_time, stop_time from rings where ( '
+            try:
+                first = True
+                for r in click_range:
+                    if not first: cmd += ' OR '
+                    cmd += '(start_time >= {r[0]} AND stop_time <= {r[1]})'.format( r=np.array(r)*2**-16 )
+                    first = False
+            except:
+                cmd += 'start_time >= {r[0]} AND stop_time <= {r[1]}'.format( r=np.array(time_range)*2**-16 )
+            cmd += ' ) {e} order by start_time'.format( e=extra )
         elif lfi_ring_range != None:
-            cmd = 'select start_time, stop_time from rings where LFI_ID >= {r[0]} and LFI_ID <= {r[1]}{e} order by start_time'.format( r=lfi_ring_range, e=extra )
+            cmd = 'select start_time, stop_time from rings where ( '
+            try:
+                first = True
+                for r in lfi_ring_range:
+                    if not first: cmd += ' OR '
+                    cmd += '(LFI_ID >= {r[0]} AND LFI_ID <= {r[1]})'.format( r=r )
+                    first = False
+            except:
+                cmd += 'LFI_ID >= {r[0]} AND LFI_ID <= {r[1]}'.format( r=lfi_ring_range )
+            cmd += ' ) {e} order by start_time'.format( e=extra )
         elif hfi_ring_range != None:
-            cmd = 'select start_time, stop_time from rings where HFI_ID >= {r[0]} and HFI_ID <= {r[1]}{e} order by start_time'.format( r=hfi_ring_range, e=extra )
+            cmd = 'select start_time, stop_time from rings where ( '
+            try:
+                first = True
+                for r in hfi_ring_range:
+                    if not first: cmd += ' OR '
+                    cmd += '(HFI_ID >= {r[0]} AND HFI_ID <= {r[1]})'.format( r=r )
+                    first = False
+            except:
+                cmd += 'HFI_ID >= {r[0]} AND HFI_ID <= {r[1]}'.format( r=hfi_ring_range )
+            cmd += ' ) {e} order by start_time'.format( e=extra )
         elif od_range != None:
-            cmd = 'select start_time, stop_time from rings where start_od >= {r[0]} and stop_od <= {r[1]}{e} order by start_time'.format( r=od_range, e=extra )
+            cmd = 'select start_time, stop_time from rings where ( '
+            try:
+                first = True
+                for r in od_range:
+                    if not first: cmd += ' OR '
+                    cmd += '(start_od >= {r[0]} AND stop_od <= {r[1]})'.format( r=r )
+                    first = False
+            except:
+                cmd += 'start_od >= {r[0]} AND stop_od <= {r[1]}'.format( r=od_range )
+            cmd += ' ) {e} order by start_time'.format( e=extra )
         else:
             print 'Warning: No range specified, mapping the entire database'
             cmd = 'select start_time, stop_time from rings order by start_time'
@@ -56,13 +101,22 @@ class RingDB:
         query = c.execute( cmd )
         self.rings = query.fetchall()
         if len(self.rings) > 0:
-            self.start = self.rings[0][0]
-            self.stop = self.rings[-1][-1]
-            self.range = [self.start, self.stop]
+            #self.start = self.rings[0][0]
+            #self.stop = self.rings[-1][-1]
+            self.starts = []
+            self.stops = []
+            self.starts.append( self.rings[0][0] )
+            for r1, r2 in zip( self.rings[0:-1], self.rings[1:] ):
+                if r2[0] - r1[1] > 3600.0:
+                    # insert a break in the ring span
+                    self.stops.append(r1[1])
+                    self.starts.append(r2[0])
+            self.stops.append(self.rings[-1][-1])
+            self.range = [self.starts[0], self.stops[-1]]
         else:
             print 'WARNING: ringdb query returned an empty list of intervals. Failed query was {}'.format( cmd )
-            self.start = None
-            self.stop = None
+            self.starts = None
+            self.stops = None
             self.range = None
 
 
@@ -255,7 +309,7 @@ class RingDB:
         except:
             conn = sqlite3.connect( self.dbfile )
             c = conn.cursor()
-            cmd = 'select od, start_time, stop_time from ods where start_time < {} and stop_time > {}'.format(self.stop, self.start)
+            cmd = 'select od, start_time, stop_time from ods where start_time < {} and stop_time > {}'.format(self.range[1], self.range[0])
             query = c.execute( cmd )
             self._observations = []
             for q in query:
@@ -316,16 +370,17 @@ class RingDB:
         except:
             conn = sqlite3.connect( self.dbfile )
             c = conn.cursor()
-            cmd = 'select pointID_unique, ESA_ID, ACMS_mode, od, start_time, stop_time from split_ACMS_modes where start_time < {} and stop_time > {} AND ('.format(self.stop, self.start)
-            if self.use_SCM: cmd += ' or ACMS_mode == "S"'
-            if self.use_HCM: cmd += ' or ACMS_mode == "H"'
-            if self.use_OCM: cmd += ' or ACMS_mode == "O"'
-            cmd = cmd.replace('( or', '(')
-            cmd += ' ) '
-            query = c.execute( cmd )
             self._intervals = []
-            for q in query:
-                self._intervals.append( {'id':q[0].encode('ascii'), 'ring':q[1].encode('ascii'), 'mode':q[2].encode('ascii'), 'od':q[3], 'start_time':q[4], 'stop_time':q[5]} )
+            for tstart, tstop in zip(self.starts, self.stops):
+                cmd = 'select pointID_unique, ESA_ID, ACMS_mode, od, start_time, stop_time from split_ACMS_modes where start_time < {} and stop_time > {} AND ('.format(tstop, tstart)
+                if self.use_SCM: cmd += ' or ACMS_mode == "S"'
+                if self.use_HCM: cmd += ' or ACMS_mode == "H"'
+                if self.use_OCM: cmd += ' or ACMS_mode == "O"'
+                cmd = cmd.replace('( or', '(')
+                cmd += ' ) '
+                query = c.execute( cmd )
+                for q in query:
+                    self._intervals.append( {'id':q[0].encode('ascii'), 'ring':q[1].encode('ascii'), 'mode':q[2].encode('ascii'), 'od':q[3], 'start_time':q[4], 'stop_time':q[5]} )
 
             return self._intervals
 
@@ -341,7 +396,7 @@ class RingDB:
                 tab = 'ring_times_hfi'
             conn = sqlite3.connect( self.dbfile )
             c = conn.cursor()
-            cmd = 'select id, pointID_unique, start_time, stop_time from {} where start_time < {} and stop_time > {}'.format(tab, self.stop, self.start)
+            cmd = 'select id, pointID_unique, start_time, stop_time from {} where start_time < {} and stop_time > {}'.format(tab, self.range[1], self.range[0])
             query = c.execute( cmd )
             self._detector_intervals = []
             for q in query:
