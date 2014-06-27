@@ -844,11 +844,11 @@ class ToastConfig(object):
                     if 'I' in self.components:
                         if self.dipole_removal:
                             self.strm["dipole_" + pix] = self.strset.stream_add( "dipole_" + pix, "dipole", Params( {"channel":pix+'_sum', "coord":"E"} ) )
-                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSH:$0.5,MUL,PUSHDATA:dipole_%s,SUB" % ( pix+first, pix+second, pix) } ) )
+                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSHDATA:dipole_%s,SUB" % ( pix+first, pix+second, pix) } ) )
                         else:
-                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSH:$0.5,MUL" % ( pix+first, pix+second) } ) )
+                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD" % ( pix+first, pix+second) } ) )
                     if 'QU' in self.components:
-                        self.strm["diff_" + pix] = self.strset.stream_add ( "diff_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,SUB,PUSH:$0.5,MUL" % ( pix+first, pix+second) } ) )
+                        self.strm["diff_" + pix] = self.strset.stream_add ( "diff_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,SUB" % ( pix+first, pix+second) } ) )
 
 
     def add_eff_tods(self):
