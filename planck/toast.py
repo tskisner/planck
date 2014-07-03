@@ -771,15 +771,34 @@ class ToastConfig(object):
                     suffix += ',ADD'
                 stack_elements.append( "PUSHDATA:simnoise_" + horn + suffix)
                 # one noise tod per pointing period
+
+                hcm = None
                 for interval in self.ringdb.detector_intervals:
-                    self.strm["simnoise_" + horn].tod_add ( "nse_%s_%05d" % (horn, interval['index']), "sim_noise", Params({
-                           "noise" : noisename,
-                           "base" : basename,
-                           "start" : pp_boundaries[0],
-                           "stop" : pp_boundaries[1],
-                           "offset" : rngstream + interval['index'],
-                           "oversample" : oversample,
-                    }))
+                    if 'H' in interval['id']:
+                        if hcm != None or interval == self.ringdb.detector_intervals[-1]:
+                            if hcm == None: hcm = interval
+                            # write out orphan HCM
+                            self.strm["simnoise_" + horn].tod_add ( "nse_%s_%05d" % (horn, hcm['index']), "sim_noise", Params({
+                                        "noise" : noisename,
+                                        "base" : basename,
+                                        "start" : hcm['start_time'],
+                                        "stop" : hcm['stop_time'],
+                                        "offset" : rngstream + hcm['index'],
+                                        "oversample" : oversample,
+                                    }))
+                            hcm = None
+                        hcm = interval
+                    else:
+                        if hcm == None: hcm = interval
+                        self.strm["simnoise_" + horn].tod_add ( "nse_%s_%05d" % (horn, interval['index']), "sim_noise", Params({
+                                    "noise" : noisename,
+                                    "base" : basename,
+                                    "start" : hcm['start_time'],
+                                    "stop" : interval['stop_time'],
+                                    "offset" : rngstream + interval['index'],
+                                    "oversample" : oversample,
+                                    }))
+                        hcm = None
 
             # add the beam sky
             if self.beamsky:
@@ -924,11 +943,29 @@ class ToastConfig(object):
                 horn = ch.tag[:-1]
                 noise = self.strset.noise_add ( "noise_" + horn, "native", Params() )
                 psdname = self.horn_noise_psd.replace('HORN', horn)
-                noise.psd_add ( "psd", "ascii", Params({
-                    "start" : self.strset.observations()[0].start(),
-                    "stop" : self.strset.observations()[-1].stop(),
-                    "path": psdname
-                    }))
+                if 'fits' in psdname:
+                    if False:
+                        # One PSD for the entire span
+                        noise.psd_add ( "psd", "fits", Params({
+                                    "start" : self.strset.observations()[0].start(),
+                                    "stop" : self.strset.observations()[-1].stop(),
+                                    "path": psdname
+                                    }))
+                    else:
+                        # Separate PSD object for every observation
+                        for obs in self.strset.observations():
+                            noise.psd_add ( "psd", "fits", Params({
+                                        "start" : obs.start(),
+                                        "stop" : obs.stop(),
+                                        "path": psdname
+                                        }))
+                else:
+                    # ASCII format only support single PSD
+                    noise.psd_add ( "psd", "ascii", Params({
+                        "start" : self.strset.observations()[0].start(),
+                        "stop" : self.strset.observations()[-1].stop(),
+                        "path": psdname
+                        }))
 
             # for sum / difference case, we only use RIMO filters
             if ( self.sum_diff ):
