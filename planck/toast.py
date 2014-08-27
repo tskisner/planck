@@ -132,7 +132,7 @@ class ToastConfig(object):
                  # Map params
                  nside=1024, ordering='RING', coord='E', components='IQU',
                  nside_des=None,
-                 iqus=False, iqus_des=False,
+                 iqus=False, iqus_des=False, extra=None, 
                  # Data directories
                  exchange_folder=None, ahf_folder=None,
                  remote_exchange_folder=None, remote_ahf_folder=None,
@@ -194,6 +194,7 @@ class ToastConfig(object):
             nside_des : Healpix NSIDE to use for destriping sky representation (default same as nside)
             iqus : If True, generate output map with one spurious map per horn (default False). If 'full', additional spurious maps are added between horns.
             iqus_des : If True, destripe on a map with one spurious map per horn (default False)
+            extra : If nonzero, set the number of extra IQUS maps rather than use internal logic
 
             additional configuration options are available modifying:
             .config
@@ -227,6 +228,7 @@ class ToastConfig(object):
         self.ordering = ordering
         self.iqus = iqus
         self.iqus_des = iqus_des
+        self.extra = extra
         if channels == None: raise Exception('Must define which channels to include')
         self.output_xml = output_xml
         self.ptcorfile = ptcorfile
@@ -473,6 +475,8 @@ class ToastConfig(object):
                     hornlist = range(nvhorn)
             else:
                 extra = nhorn # hornmaps
+
+        if self.extra: extra = self.extra
 
         mapset = sky.mapset_add ( '_'.join(['healpix',self.components, self.ordering]), "healpix", 
             Params({
@@ -759,8 +763,14 @@ class ToastConfig(object):
 
             # add simulated noise stream common to each horn
             if self.horn_noise_tod and ch.tag[-1] in 'MSab':
-                horn = ch.tag[:-1]
+                horn = ch.tag[:-1] 
                 rngstream = self.rngorder[ horn ] * 100000
+                chan = ch.tag
+                pair = get_pair( chan )
+                if chan[-1] in 'Ma':
+                    horn = chan + '_' + pair
+                else:
+                    horn = pair + '_' + chan
 
                 noisename = "/planck/" + self.f.inst.name + "/noise_" + horn
                 self.strm["simnoise_" + horn] = self.strset.stream_add( "simnoise_" + horn, "native", Params( ) )
@@ -941,8 +951,12 @@ class ToastConfig(object):
             # add horn noise psd
             if self.horn_noise_tod and ch.tag[-1] in 'aM':
                 horn = ch.tag[:-1]
-                noise = self.strset.noise_add ( "noise_" + horn, "native", Params() )
                 psdname = self.horn_noise_psd.replace('HORN', horn)
+                #pix, first, second = pairsplit(ch.tag)
+                chan = ch.tag
+                pair = get_pair( chan )
+                horn = chan + '_' + pair
+                noise = self.strset.noise_add ( "noise_" + horn, "native", Params() )
                 if 'fits' in psdname:
                     if False:
                         # One PSD for the entire span
