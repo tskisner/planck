@@ -144,7 +144,7 @@ class ToastConfig(object):
                  pairflags=None,
                  # pointing corrections
                  ptcorfile=None, no_wobble=False, wobble_high=False, deaberrate=True,
-                 calibration_file=None, dipole_removal=False,
+                 calibration_file=None, dipole_removal=False, zodi_removal=False,
                  # Baseline subtraction
                  baseline_file=None, 
                  # Noise simulation
@@ -172,6 +172,7 @@ class ToastConfig(object):
             calibration_file: path to a fits calibration file, with first extension OBT, then one extension per channel with the calibration factors
             baseline_file : path to a Madam or TOAST baseline file to subtract presolved baselines
             dipole_removal: dipole removal is performed ONLY if calibration is specified
+            zodi_removal(False) : enable zodiacal light removal
             noise_tod: Add simulated noise TODs
             noise_tod_weight: scaling factor to apply to noise_tod
             flag_HFI_bad_rings: If a valid file, use that as input.
@@ -413,6 +414,7 @@ class ToastConfig(object):
         self.calibration_file = calibration_file
         self.baseline_file = baseline_file
         self.dipole_removal = dipole_removal
+        self.zodi_removal = zodi_removal
 
         if flag_HFI_bad_rings and not os.path.isfile(str(flag_HFI_bad_rings)):
             raise Exception('Sorry, unable to open HFI bad ring list: {}'.format(str(flag_HFI_bad_rings)))
@@ -857,6 +859,11 @@ class ToastConfig(object):
                 self.strm["dipole_" + ch.tag] = self.strset.stream_add( "dipole_" + ch.tag, "dipole", Params( {"channel":ch.tag, "coord":"E"} ) )
                 stack_elements.append("PUSHDATA:dipole_" + ch.tag + ",SUB")
 
+            # zodi subtract
+            if self.zodi_removal and not self.sum_diff:
+                self.strm["zodi_" + ch.tag] = self.strset.stream_add( "zodi_" + ch.tag, "zodi", Params( {"channel":ch.tag, "coord":"E", "emissivity":"1.0"} ) )
+                stack_elements.append("PUSHDATA:zodi_" + ch.tag + ",SUB")
+
             # bad rings
             if self.bad_rings:
                 self.strm["bad_" + ch.tag] = self.strset.stream_add ( "bad_" + ch.tag, "planck_bad", Params({'detector':ch.tag, 'path':self.bad_rings}) )
@@ -871,11 +878,14 @@ class ToastConfig(object):
                 pix, first, second = pairsplit(ch.tag)
                 if ( first != "" ):
                     if 'I' in self.components:
+                        expr = "PUSH:stack_%s,PUSH:stack_%s,ADD" % ( pix+first, pix+second)
                         if self.dipole_removal:
                             self.strm["dipole_" + pix] = self.strset.stream_add( "dipole_" + pix, "dipole", Params( {"channel":pix+'_sum', "coord":"E"} ) )
-                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD,PUSHDATA:dipole_%s,SUB" % ( pix+first, pix+second, pix) } ) )
-                        else:
-                            self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,ADD" % ( pix+first, pix+second) } ) )
+                            expr += ",PUSHDATA:dipole_%s,SUB" % ( pix )
+                        if self.zodi_removal:
+                            self.strm["zodi_" + pix] = self.strset.stream_add( "zodi_" + pix, "zodi", Params( {"channel":pix+'_sum', "coord":"E", "emissivity":"1.0"} ) )
+                            expr += ",PUSHDATA:zodi_%s,SUB" % ( pix )
+                        self.strm["sum_" + pix] = self.strset.stream_add ( "sum_" + pix, "stack", Params( { 'expr' : expr } ) )
                     if 'QU' in self.components:
                         self.strm["diff_" + pix] = self.strset.stream_add ( "diff_" + pix, "stack", Params( { 'expr' : "PUSH:stack_%s,PUSH:stack_%s,SUB" % ( pix+first, pix+second) } ) )
 
