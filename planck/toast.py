@@ -19,6 +19,9 @@ import pyfits
 
 l.basicConfig(level=l.INFO)
 
+sim_noise2_period = 60.
+sim_noise2_nbin = 10000
+
 def find_AHF(dir, od):
     """Searches the supplied directory for an AHF file with velocity information appended"""
     pattern = '{}/{:04}/vel_att_hist_high_*{:04}*fits'.format( dir, od, od )
@@ -173,7 +176,7 @@ class ToastConfig(object):
             baseline_file : path to a Madam or TOAST baseline file to subtract presolved baselines
             dipole_removal: dipole removal is performed ONLY if calibration is specified
             zodi_removal(False) : enable zodiacal light removal
-            noise_tod: Add simulated noise TODs
+            noise_tod: boolean = Add simulated noise TODs. two-element container, weights for regular and phase-binned noise.
             noise_tod_weight: scaling factor to apply to noise_tod
             flag_HFI_bad_rings: If a valid file, use that as input.
             pairflags(None): Explicitly enable or disable symmetric flagging within horns. Default is LFI(True), HFI(False)
@@ -741,26 +744,63 @@ class ToastConfig(object):
                         if hcm != None or interval == self.ringdb.detector_intervals[-1]:
                             if hcm == None: hcm = interval
                             # write out orphan HCM
-                            self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, hcm['index']), "sim_noise", Params({
-                                        "noise" : noisename,
-                                        "base" : basename,
-                                        "start" : hcm['start_time'],
-                                        "stop" : hcm['stop_time'],
-                                        "offset" : rngstream + hcm['index'],
-                                        "oversample" : oversample,
-                                    }))
+                            try:
+                                nn = len( self.noise_tod )
+                                if nn != 2: raise Exception()
+                                # if we made it this far, user gave sim_noise2 weights
+                                self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, hcm['index']), "sim_noise2", Params({
+                                            "noise" : noisename,
+                                            "base" : basename,
+                                            "start" : hcm['start_time'],
+                                            "stop" : hcm['stop_time'],
+                                            "offset" : rngstream + hcm['index'],
+                                            "oversample" : oversample,
+                                            "weight1" : self.noise_tod[0],
+                                            "weight2" : self.noise_tod[1],
+                                            "period" : sim_noise2_period,
+                                            "nbin"   : sim_noise2_nbin,
+                                        }))
+                            except:
+                                if nn == 2: raise
+                                # User wants regular noise, not phase binned
+                                self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, hcm['index']), "sim_noise", Params({
+                                            "noise" : noisename,
+                                            "base" : basename,
+                                            "start" : hcm['start_time'],
+                                            "stop" : hcm['stop_time'],
+                                            "offset" : rngstream + hcm['index'],
+                                            "oversample" : oversample,
+                                        }))
                             hcm = None
                         hcm = interval
                     else:
                         if hcm == None: hcm = interval
-                        self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, interval['index']), "sim_noise", Params({
-                                    "noise" : noisename,
-                                    "base" : basename,
-                                    "start" : hcm['start_time'],
-                                    "stop" : interval['stop_time'],
-                                    "offset" : rngstream + interval['index'],
-                                    "oversample" : oversample,
+                        try:
+                            nn = len( self.noise_tod )
+                            if nn != 2: raise Exception()
+                            # if we made it this far, user gave sim_noise2 weights
+                            self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, interval['index']), "sim_noise2", Params({
+                                        "noise" : noisename,
+                                        "base" : basename,
+                                        "start" : hcm['start_time'],
+                                        "stop" : interval['stop_time'],
+                                        "offset" : rngstream + interval['index'],
+                                        "oversample" : oversample,
+                                        "weight1" : self.noise_tod[0],
+                                        "weight2" : self.noise_tod[1],
+                                        "period" : sim_noise2_period,
+                                        "nbin"   : sim_noise2_nbin,
                                     }))
+                        except:
+                            if nn == 2: raise
+                            self.strm["simnoise_" + ch.tag].tod_add ( "nse_%s_%05d" % (ch.tag, interval['index']), "sim_noise", Params({
+                                        "noise" : noisename,
+                                        "base" : basename,
+                                        "start" : hcm['start_time'],
+                                        "stop" : interval['stop_time'],
+                                        "offset" : rngstream + interval['index'],
+                                        "oversample" : oversample,
+                                        }))
                         hcm = None
 
             # add simulated noise stream common to each horn
