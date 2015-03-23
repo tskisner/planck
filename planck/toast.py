@@ -19,8 +19,7 @@ import pyfits
 
 l.basicConfig(level=l.INFO)
 
-sim_noise2_period = 60.
-sim_noise2_nbin = 10000
+sim_noise2_nbin = 14345
 
 def find_AHF(dir, od):
     """Searches the supplied directory for an AHF file with velocity information appended"""
@@ -744,6 +743,7 @@ class ToastConfig(object):
                         if hcm != None or interval == self.ringdb.detector_intervals[-1]:
                             if hcm == None: hcm = interval
                             # write out orphan HCM
+                            nn = 0
                             try:
                                 nn = len( self.noise_tod )
                                 if nn != 2: raise Exception()
@@ -757,7 +757,6 @@ class ToastConfig(object):
                                             "oversample" : oversample,
                                             "weight1" : self.noise_tod[0],
                                             "weight2" : self.noise_tod[1],
-                                            "period" : sim_noise2_period,
                                             "nbin"   : sim_noise2_nbin,
                                         }))
                             except:
@@ -775,6 +774,7 @@ class ToastConfig(object):
                         hcm = interval
                     else:
                         if hcm == None: hcm = interval
+                        nn = 0
                         try:
                             nn = len( self.noise_tod )
                             if nn != 2: raise Exception()
@@ -788,7 +788,6 @@ class ToastConfig(object):
                                         "oversample" : oversample,
                                         "weight1" : self.noise_tod[0],
                                         "weight2" : self.noise_tod[1],
-                                        "period" : sim_noise2_period,
                                         "nbin"   : sim_noise2_nbin,
                                     }))
                         except:
