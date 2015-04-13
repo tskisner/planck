@@ -97,7 +97,10 @@ class LFI(Planck.Instrument):
         
     def instrument_db(self,ch):
         if not hasattr(self,'_instrument_db') or self._instrument_db is None:
-            import pyfits
+            try:
+                from astropy.io import fits as pyfits
+            except ImportError:
+                import pyfits
             self._instrument_db = np.array(pyfits.open(self.instrument_db_file,ignore_missing_end=True)[1].data)
             l.warning('Loading instrumentdb %s' % self.instrument_db_file)
         det_index, = np.where([rad.strip().endswith(ch.tag) for rad in self._instrument_db['Radiometer']])

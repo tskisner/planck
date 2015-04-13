@@ -2,7 +2,10 @@ from __future__ import division
 
 #TODO remove useless imports
 import math
-import pyfits
+try:
+    from astropy.io import fits as pyfits
+except ImportError:
+    import pyfits
 import logging as l 
 import csv
 import glob

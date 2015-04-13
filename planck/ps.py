@@ -2,7 +2,10 @@ import subprocess
 import pkgutil
 import numpy as np
 import os
-import pyfits
+try:
+    from astropy.io import fits as pyfits
+except ImportError:
+    import pyfits
 from configobj import ConfigObj
 import math
 
