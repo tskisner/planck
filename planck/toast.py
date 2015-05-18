@@ -23,6 +23,7 @@ except ImportError:
 l.basicConfig(level=l.INFO)
 
 sim_noise2_nbin = 14345
+#sim_noise2_nbin = 7172
 
 def find_AHF(dir, od):
     """Searches the supplied directory for an AHF file with velocity information appended"""
@@ -36,7 +37,7 @@ def find_AHF(dir, od):
 
 def find_EFF(dir, od, freq, efftype):
     """Searches the supplied directory for an Exchange File Format file with right frequency and type"""
-    pattern = '{}/{:04}/?{:03}-{:04}-{}-*fits'.format( dir, od, freq, od, efftype )
+    pattern = '{}/{:04}/?{:03}?{:04}?{}*fits'.format( dir, od, freq, od, efftype )
     files = glob.glob( pattern )
     if len(files) == 0:
         raise Exception('Found no EFF file matching {}'.format( pattern ))
@@ -222,8 +223,9 @@ class ToastConfig(object):
         self.ringdb.exclude_od( private.bad_ods )
         self.ringdb.exclude_ring( private.bad_rings )
         self.observation_is_interval = observation_is_interval
-        if not os.path.isfile( fpdb ):
-            raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
+        # Disabled to allow remote build
+        #if not os.path.isfile( fpdb ):
+        #    raise Exception('Sorry, unable to open focalplane database: {}'.format(str(fpdb)))
         self.fpdb = fpdb
         self.nside = nside
         if ( nside_des == None ):
@@ -421,8 +423,9 @@ class ToastConfig(object):
         self.dipole_removal = dipole_removal
         self.zodi_removal = zodi_removal
 
-        if flag_HFI_bad_rings and not os.path.isfile(str(flag_HFI_bad_rings)):
-            raise Exception('Sorry, unable to open HFI bad ring list: {}'.format(str(flag_HFI_bad_rings)))
+        # Disable bad ring list check to allow building runs for other systems
+        #if flag_HFI_bad_rings and not os.path.isfile(str(flag_HFI_bad_rings)):
+        #    raise Exception('Sorry, unable to open HFI bad ring list: {}'.format(str(flag_HFI_bad_rings)))
         self.bad_rings = flag_HFI_bad_rings
 
         self.eff_is_for_flags = eff_is_for_flags
