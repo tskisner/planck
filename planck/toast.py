@@ -1079,7 +1079,10 @@ class ToastConfig(object):
             else:
                 # we have a spiderweb or are not doing sum/diff
                 params[ "detector" ] = ch.tag
-                params[ "stream" ] = "/planck/%s/stack_%s" % (self.f.inst.name, ch.tag)
+                if self.dipole_removal:
+                    params[ "stream" ] = "DEFAULT:/planck/%s/stack_%s" % (self.f.inst.name, ch.tag) + ',DIPOLE:/planck/{}/dipole_{}'.format(self.f.inst.name, ch.tag)
+                else:
+                    params[ "stream" ] = "/planck/%s/stack_%s" % (self.f.inst.name, ch.tag)
                 if self.channel_psd != self.simu_psd:
                     params[ "noise" ] = "/planck/%s/noise_channel_%s" % (self.f.inst.name, ch.tag)
                 else:

@@ -39,7 +39,7 @@ class RingDB:
         else:
             extra = ' AND start_time >= 1628777500 AND stop_time <= 1705157700'
 
-        if time_range != None:
+        if time_range is not None:
             cmd = 'select start_time, stop_time from rings where ( '
             try:
                 first = True
@@ -50,7 +50,7 @@ class RingDB:
             except:
                 cmd += 'start_time >= {r[0]} AND stop_time <= {r[1]}'.format( r=time_range )
             cmd += ' ) {e} order by start_time'.format( e=extra )
-        elif click_range != None:
+        elif click_range is not None:
             cmd = 'select start_time, stop_time from rings where ( '
             try:
                 first = True
@@ -61,7 +61,7 @@ class RingDB:
             except:
                 cmd += 'start_time >= {r[0]} AND stop_time <= {r[1]}'.format( r=np.array(time_range)*2**-16 )
             cmd += ' ) {e} order by start_time'.format( e=extra )
-        elif lfi_ring_range != None:
+        elif lfi_ring_range is not None:
             cmd = 'select start_time, stop_time from rings where ( '
             try:
                 first = True
@@ -72,7 +72,7 @@ class RingDB:
             except:
                 cmd += 'LFI_ID >= {r[0]} AND LFI_ID <= {r[1]}'.format( r=lfi_ring_range )
             cmd += ' ) {e} order by start_time'.format( e=extra )
-        elif hfi_ring_range != None:
+        elif hfi_ring_range is not None:
             cmd = 'select start_time, stop_time from rings where ( '
             try:
                 first = True
@@ -83,7 +83,7 @@ class RingDB:
             except:
                 cmd += 'HFI_ID >= {r[0]} AND HFI_ID <= {r[1]}'.format( r=hfi_ring_range )
             cmd += ' ) {e} order by start_time'.format( e=extra )
-        elif od_range != None:
+        elif od_range is not None:
             cmd = 'select start_time, stop_time from rings where ( '
             try:
                 first = True
@@ -241,13 +241,13 @@ class RingDB:
 
     def exclude( self, od=None, ring=None ):
 
-        if od != None:
-            if ring != None:
+        if od is not None:
+            if ring is not None:
                 raise Exception('Cannot exclude rings and ODs at the same time')
             key = 'od'
             value = od
             print 'Excluding OD == {}'.format(od)
-        elif ring != None:
+        elif ring is not None:
             key = 'ring'
             value = ring
             print 'Excluding ring == {}'.format(od)
