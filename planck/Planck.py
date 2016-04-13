@@ -45,7 +45,10 @@ class Channel(ChannelBase):
     '''Abstract channel class for LFI and HFI channels'''
 
     def __init__(self, data, inst=None):
-        self.tag = data[0].strip()
+        try:
+            self.tag = data[0].strip()
+        except:
+            self.tag = data[0][0].strip()
         self.rimo = np.array(data)
         self.inst = inst
 

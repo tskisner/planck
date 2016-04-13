@@ -132,7 +132,7 @@ class ToastConfig(object):
     def __init__(self, ringdb, fpdb, 
                  time_range=None, click_range=None, lfi_ring_range=None, hfi_ring_range=None, od_range=None,
                  # Detector information
-                 channels=None, extend_857=True,
+                 channels=None, extend_143=False, extend_545=False, extend_857=True,
                  psd=None, channel_psd=None, simu_psd=None,
                  output_xml='toastrun.xml', log_level=l.INFO,
                  # Map params
@@ -190,6 +190,8 @@ class ToastConfig(object):
             horn_noise_weight : None
             horn_noise_psd : templated name of an ASCII PSD files. Tag HORN will be replaced with the appropriate identifier.
             deaberrate : Correct pointing for aberration
+            extend_143 : Whether or not to include the RTS bolometer, 143-8 in processing
+            extend_545 : Whether or not to include the RTS bolometer, 545-3 in processing
             extend_857 : Whether or not to include the RTS bolometer, 857-4 in processing
             no_wobble : Disable all flavors of wobble angle correction
             wobble_high : Use 8Hz wobble correction rather than per ring
@@ -210,6 +212,12 @@ class ToastConfig(object):
             dictionaries before running .run()
         """
         l.root.level = log_level
+        self.extend_143 = extend_143
+        if self.extend_143:
+            if '143-8' in EXCLUDED_CH: EXCLUDED_CH.remove('143-8')
+        self.extend_545 = extend_545
+        if self.extend_545:
+            if '545-3' in EXCLUDED_CH: EXCLUDED_CH.remove('545-3')
         self.extend_857 = extend_857
         if self.extend_857:
             if '857-4' in EXCLUDED_CH: EXCLUDED_CH.remove('857-4')
@@ -900,9 +908,18 @@ class ToastConfig(object):
                 stack_elements.append("PUSH:baseline_" + ch.tag + ",SUB")
             
             # dipole subtract
-            if self.dipole_removal and not self.sum_diff:
+            if not self.sum_diff:
+                # Always add all three types of dipole streams, even if only one is included in the stack
+                self.strm["orbital_dipole_" + ch.tag] = self.strset.stream_add( "orbital_dipole_" + ch.tag, "dipole", Params( {"channel":ch.tag, "coord":"E", "type":"ORBITAL"} ) )
+                self.strm["solsys_dipole_" + ch.tag] = self.strset.stream_add( "solsys_dipole_" + ch.tag, "dipole", Params( {"channel":ch.tag, "coord":"E", "type":"SOLSYS"} ) )
                 self.strm["dipole_" + ch.tag] = self.strset.stream_add( "dipole_" + ch.tag, "dipole", Params( {"channel":ch.tag, "coord":"E"} ) )
-                stack_elements.append("PUSHDATA:dipole_" + ch.tag + ",SUB")
+                if self.dipole_removal:
+                    if self.dipole_removal == 'ORBITAL':
+                        stack_elements.append("PUSHDATA:orbital_dipole_" + ch.tag + ",SUB")
+                    if self.dipole_removal == 'SOLSYS':
+                        stack_elements.append("PUSHDATA:solsys_dipole_" + ch.tag + ",SUB")
+                    else:
+                        stack_elements.append("PUSHDATA:dipole_" + ch.tag + ",SUB")
 
             # zodi subtract
             if self.zodi_removal and not self.sum_diff:
@@ -923,10 +940,33 @@ class ToastConfig(object):
                 pix, first, second = pairsplit(ch.tag)
                 if ( first != "" ):
                     if 'I' in self.components:
-                        expr = "PUSH:stack_%s,PUSH:stack_%s,ADD" % ( pix+first, pix+second)
+                        try:
+                            # Optimize the weights to minimize P->T leakage
+                            ipair = [ c.tag for c in self.channels ].index( pix+second )
+                            chpair = self.channels[ ipair ]
+                            eps1 = ch.rimo['EPSILON']
+                            eps2 = chpair.rimo['EPSILON']
+                            eta1 = ( 1 - eps1 ) / ( 1 + eps1 )
+                            eta2 = ( 1 - eps2 ) / ( 1 + eps2 )
+                            w1 = eta2 / ( eta1 + eta2 )
+                            w2 = eta1 / ( eta1 + eta2 )
+                        except:
+                            w1, w2 = None, None
+                        if w1 is not None:
+                            expr = "PUSH:stack_{},PUSH:${},MUL,PUSH:stack_{},PUSH:${},MUL,ADD".format( pix+first, w1, pix+second, w2)
+                        else:
+                            expr = "PUSH:stack_%s,PUSH:stack_%s,ADD" % ( pix+first, pix+second)
+                        # Always add the dipole streams, even if they are not included on the stack
+                        self.strm["orbital_dipole_" + pix] = self.strset.stream_add( "orbital_dipole_" + pix, "dipole", Params( {"channel":pix+'_sum', "coord":"E", "type":"ORBITAL"} ) )
+                        self.strm["solsys_dipole_" + pix] = self.strset.stream_add( "solsys_dipole_" + pix, "dipole", Params( {"channel":pix+'_sum', "coord":"E", "TYPE":"SOLSYS"} ) )
+                        self.strm["dipole_" + pix] = self.strset.stream_add( "dipole_" + pix, "dipole", Params( {"channel":pix+'_sum', "coord":"E"} ) )
                         if self.dipole_removal:
-                            self.strm["dipole_" + pix] = self.strset.stream_add( "dipole_" + pix, "dipole", Params( {"channel":pix+'_sum', "coord":"E"} ) )
-                            expr += ",PUSHDATA:dipole_%s,SUB" % ( pix )
+                            if self.dipole_removal == 'ORBITAL':
+                                expr += ",PUSHDATA:orbital_dipole_%s,SUB" % ( pix )
+                            elif self.dipole_removal == 'SOLSYS':
+                                expr += ",PUSHDATA:solsys_dipole_%s,SUB" % ( pix )
+                            else:
+                                expr += ",PUSHDATA:dipole_%s,SUB" % ( pix )
                         if self.zodi_removal:
                             self.strm["zodi_" + pix] = self.strset.stream_add( "zodi_" + pix, "zodi", Params( {"channel":pix+'_sum', "coord":"E", "emissivity":"1.0"} ) )
                             expr += ",PUSHDATA:zodi_%s,SUB" % ( pix )
@@ -1068,7 +1108,7 @@ class ToastConfig(object):
                 # we have the first detector of a pair, and want the sum/diff
                 if 'I' in self.components:
                     params[ "detector" ] = pix + "_sum"
-                    params[ "stream" ] = "/planck/%s/sum_%s" % (self.f.inst.name, pix)
+                    params[ "stream" ] = "DEFAULT:/planck/%s/sum_%s" % (self.f.inst.name, pix) + ',ORBITAL_DIPOLE:/planck/{}/orbital_dipole_{}'.format(self.f.inst.name, pix) + ',SOLSYS_DIPOLE:/planck/{}/solsys_dipole_{}'.format(self.f.inst.name, pix) + ',DIPOLE:/planck/{}/dipole_{}'.format(self.f.inst.name, pix)
                     params[ "noise" ] = "/planck/%s/noise_%s" % (self.f.inst.name, pix + "_sum")
                     telescope.channel_add ( pix + "_sum", "native", params )
                 if 'QU' in self.components:
@@ -1079,10 +1119,7 @@ class ToastConfig(object):
             else:
                 # we have a spiderweb or are not doing sum/diff
                 params[ "detector" ] = ch.tag
-                if self.dipole_removal:
-                    params[ "stream" ] = "DEFAULT:/planck/%s/stack_%s" % (self.f.inst.name, ch.tag) + ',DIPOLE:/planck/{}/dipole_{}'.format(self.f.inst.name, ch.tag)
-                else:
-                    params[ "stream" ] = "/planck/%s/stack_%s" % (self.f.inst.name, ch.tag)
+                params[ "stream" ] = "DEFAULT:/planck/%s/stack_%s" % (self.f.inst.name, ch.tag) + ',ORBITAL_DIPOLE:/planck/{}/orbital_dipole_{}'.format(self.f.inst.name, ch.tag) + ',SOLSYS_DIPOLE:/planck/{}/solsys_dipole_{}'.format(self.f.inst.name, ch.tag) + ',DIPOLE:/planck/{}/dipole_{}'.format(self.f.inst.name, ch.tag)
                 if self.channel_psd != self.simu_psd:
                     params[ "noise" ] = "/planck/%s/noise_channel_%s" % (self.f.inst.name, ch.tag)
                 else:
