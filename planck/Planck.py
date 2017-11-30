@@ -1,3 +1,4 @@
+from __future__ import print_function, division
 
 try:
     from astropy.io import fits as pyfits
@@ -5,7 +6,6 @@ except ImportError:
     import pyfits
 
 import numpy as np
-from exceptions import KeyError
 import itertools
 import operator
 
@@ -46,9 +46,9 @@ class Channel(ChannelBase):
 
     def __init__(self, data, inst=None):
         try:
-            self.tag = data[0].strip()
+            self.tag = data[0].strip().decode()
         except:
-            self.tag = data[0][0].strip()
+            self.tag = data[0][0].strip().decode()
         self.rimo = np.array(data)
         self.inst = inst
 
@@ -151,9 +151,9 @@ class Instrument(object):
         return self.chdict[key]
         
     
-import LFI
-import HFI
-import private
+from . import LFI
+from . import HFI
+from . import private
 
 
 class Planck(object):
@@ -162,7 +162,7 @@ class Planck(object):
     def __init__(self):
         self.inst = {'LFI':LFI.LFI(), 'HFI':HFI.HFI()}
         self.ch = [ch for inst in self.inst.values() for ch in inst.ch]
-        self.f = dict((freq,f) for inst in self.inst.values() for freq,f in inst.f.iteritems())
+        self.f = dict((freq,f) for inst in self.inst.values() for freq,f in inst.f.items())
 
     def __getitem__(self, key):
         try:

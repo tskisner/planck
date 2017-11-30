@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+from __future__ import print_function, division
 #
 # Generic python class for dealing with Planck HFI
 # by zonca@deepspace.ucsb.edu
 
 import numpy as np
-import Planck
-import private
+from . import Planck
+from . import private
 
 class HFIChannel(Planck.Channel):
 

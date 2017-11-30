@@ -1,8 +1,8 @@
+from __future__ import print_function, division
 import sys
 import numpy as np
 import copy
 import os
-import exceptions
 import glob
 import sqlite3
 from planck.ringdb import RingDB
@@ -115,7 +115,7 @@ def Params(dic=None):
     """Creates a Toast ParMap from a python dictionary"""
     params = ParMap()
     if not dic is None:
-        for k,v in dic.iteritems():
+        for k,v in dic.items():
             if isinstance(v, float):
                 v = strconv(v)
             else:
@@ -399,7 +399,7 @@ class ToastConfig(object):
         self.remote_ahf_folder = remote_ahf_folder
         
         if exchange_folder:
-            if isinstance(exchange_folder, basestring):
+            if isinstance(exchange_folder, str):
                 exchange_folder = [exchange_folder]
             for d in exchange_folder:
                 if not os.path.isdir(str(d)):
@@ -407,7 +407,7 @@ class ToastConfig(object):
         self.exchange_folder = exchange_folder
         
         if remote_exchange_folder:
-            if isinstance(remote_exchange_folder, basestring):
+            if isinstance(remote_exchange_folder, str):
                 remote_exchange_folder = [remote_exchange_folder]
         self.remote_exchange_folder = remote_exchange_folder
         
@@ -629,18 +629,20 @@ class ToastConfig(object):
 
             eff_files = OrderedDict()
             eff_ods = self.ringdb.get_eff_ods(observation['ods']) # dictionary of dictionaries
-            print 'Observation {} ods: '.format(observation['id']),
-            for od in observation['ods']: print ' {}'.format(od),
-            print ' EFF ods: ',
-            for eff_od in eff_ods.keys(): print ' {}'.format(eff_od),
-            print
+            print('Observation {} ods: '.format(observation['id']), end='')
+            for od in observation['ods']:
+                print(' {}'.format(od), end='')
+            print(' EFF ods: ', end='')
+            for eff_od in eff_ods.keys():
+                print(' {}'.format(eff_od), end='')
+            print()
             earliest = 1e30
             latest = -1e30
             for eff_od, oddict in eff_ods.items():
                 earliest = min( earliest, oddict['start_time'] )
                 latest = max( latest, oddict['stop_time'] )
                 eff_files[ find_EFF(self.exchange_folder[0], eff_od, self.f.freq, self.efftype) ] = True
-            print eff_files.keys()
+            print(eff_files.keys())
             eff_files = eff_files.keys()
             for i, eff in enumerate( eff_files ):
                 if self.remote_exchange_folder:
@@ -986,7 +988,7 @@ class ToastConfig(object):
                         print('Removing %s because of breaks' % self.tod_name_list[ix][ch.tag][delindex])
                         del self.tod_name_list[ix][ch.tag][delindex]
                         del self.tod_par_list[ix][ch.tag][delindex]
-                    except exceptions.ValueError:
+                    except ValueError:
                         pass
 
             # add EFF to stream

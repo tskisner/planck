@@ -1,13 +1,14 @@
+from __future__ import print_function, division
+
 # Generic python class for dealing with Planck LFI
 
 import logging as l
 import numpy as np
-import Planck
-import private
-import cPickle
+from . import Planck
+from . import private
+import pickle
 import os
 import sys
-import exceptions
 
 class LFI_response:
     """ Class to store response curve in similar format to
@@ -128,7 +129,7 @@ class Detector(Planck.ChannelBase):
         import scipy.interpolate.fitpack as fit
         sys.modules['__main__'].LFI_response = LFI_response
         try:
-            resp = cPickle.load(open(os.path.join(private.ADC['folder'], "%s_LFI_response.pic" % self.cdstag.lower())))
+            resp = pickle.load(open(os.path.join(private.ADC['folder'], "%s_LFI_response.pic" % self.cdstag.lower())))
         except exceptions.IOError:
             l.warning('NO ADC response for %s' % self.tag)
         return fit.splrep(resp.sky_volt_out,resp.sky_volt_in,s=0.0),  fit.splrep(resp.load_volt_out,resp.load_volt_in,s=0.0)

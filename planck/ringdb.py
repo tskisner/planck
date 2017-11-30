@@ -1,3 +1,4 @@
+from __future__ import print_function, division
 import sys
 import numpy as np
 import os
@@ -44,7 +45,8 @@ class RingDB:
             try:
                 first = True
                 for r in time_range:
-                    if not first: cmd += ' OR '
+                    if not first:
+                        cmd += ' OR '
                     cmd += '(start_time >= {r[0]} AND stop_time <= {r[1]})'.format( r=r )
                     first = False
             except:
@@ -55,7 +57,8 @@ class RingDB:
             try:
                 first = True
                 for r in click_range:
-                    if not first: cmd += ' OR '
+                    if not first:
+                        cmd += ' OR '
                     cmd += '(start_time >= {r[0]} AND stop_time <= {r[1]})'.format( r=np.array(r)*2**-16 )
                     first = False
             except:
@@ -77,7 +80,8 @@ class RingDB:
             try:
                 first = True
                 for r in hfi_ring_range:
-                    if not first: cmd += ' OR '
+                    if not first:
+                        cmd += ' OR '
                     cmd += '(HFI_ID >= {r[0]} AND HFI_ID <= {r[1]})'.format( r=r )
                     first = False
             except:
@@ -88,16 +92,17 @@ class RingDB:
             try:
                 first = True
                 for r in od_range:
-                    if not first: cmd += ' OR '
+                    if not first:
+                        cmd += ' OR '
                     cmd += '(start_od >= {r[0]} AND stop_od <= {r[1]})'.format( r=r )
                     first = False
             except:
                 cmd += 'start_od >= {r[0]} AND stop_od <= {r[1]}'.format( r=od_range )
             cmd += ' ) {e} order by start_time'.format( e=extra )
         else:
-            print 'Warning: No range specified, mapping the entire database'
+            print('Warning: No range specified, mapping the entire database')
             cmd = 'select start_time, stop_time from rings order by start_time'
-            
+
         query = c.execute( cmd )
         self.rings = query.fetchall()
         if len(self.rings) > 0:
@@ -114,7 +119,7 @@ class RingDB:
             self.stops.append(self.rings[-1][-1])
             self.range = [self.starts[0], self.stops[-1]]
         else:
-            print 'WARNING: ringdb query returned an empty list of intervals. Failed query was {}'.format( cmd )
+            print('WARNING: ringdb query returned an empty list of intervals. Failed query was {}'.format( cmd ))
             self.starts = None
             self.stops = None
             self.range = None
@@ -138,7 +143,7 @@ class RingDB:
               'from eff_breaks where freq == {} and start_time < {} and stop_time > {}'.format(
             freq, self.observations[-1]['stop_time'], self.observations[0]['start_time'])
        #     freq, self.stop, self.start)
-            
+
         query = c.execute( cmd )
         for q in query:
             eff_od, start_time, stop_time, start_row, stop_row, start_od, stop_od = q
@@ -148,7 +153,7 @@ class RingDB:
             while iint < len(self.intervals):
                 interval = copy.deepcopy( self.intervals[iint] )
                 if interval['start_time'] < stop_time and interval['stop_time'] > start_time:
-                    print 'Breaking interval {}'.format(interval['id'])
+                    print('Breaking interval {}'.format(interval['id']))
                     # Break this interval
                     if start_time <= interval['start_time'] and stop_time >= interval['stop_time']:
                         # interval is contained in the break
@@ -170,14 +175,14 @@ class RingDB:
                         self.intervals.insert(iint, interval)
                         break
                 iint += 1
-                
+
             # Apply the breaks to self.observations, reset the interval lists to be populated later
             iobs = 0
             while iobs < len(self.observations):
                 observation = self.observations[iobs] # Soft link
                 if observation['start_time'] < stop_time and observation['stop_time'] > start_time:
                     # Break this observation
-                    print 'Breaking observation {}'.format(observation['id'])
+                    print('Breaking observation {}'.format(observation['id']))
                     observation = copy.deepcopy( self.observations[iobs] ) # hard copy
                     if start_time <= observation['start_time'] and stop_time >= observation['stop_time']:
                         # observation is contained in the break
@@ -211,7 +216,7 @@ class RingDB:
                         self.observations.insert(iobs, observation)
                         break
                 iobs += 1
-                                
+
         # Now re-populate the empty interval lists
 
         for observation in self.observations:
@@ -246,11 +251,11 @@ class RingDB:
                 raise Exception('Cannot exclude rings and ODs at the same time')
             key = 'od'
             value = od
-            print 'Excluding OD == {}'.format(od)
+            print('Excluding OD == {}'.format(od))
         elif ring is not None:
             key = 'ring'
             value = ring
-            print 'Excluding ring == {}'.format(od)
+            print('Excluding ring == {}'.format(od))
         else:
             raise Exception('Must specify od or ring to exclude')
 
@@ -267,7 +272,7 @@ class RingDB:
                 values.append( value )
 
         for v in values:
-            if key == 'od' and not isinstance(v, int):
+            if key == 'od' and int(v) != float(v):
                 raise Exception('Excluded ODs must have integer IDs: {}'.format(v))
             if key == 'ring' and not isinstance(v, str):
                 raise Exception('Excluded rings must have string IDs: {}'.format(v))
@@ -299,7 +304,7 @@ class RingDB:
                 del self.intervals[iint]
             else:
                 iint += 1
-                    
+
 
     @property
     def observations(self):
@@ -316,7 +321,8 @@ class RingDB:
                 od = q[0]
                 obs_intervals = []
                 for interval in self.intervals:
-                    if interval['od'] == od: obs_intervals.append(interval)
+                    if interval['od'] == od:
+                        obs_intervals.append(interval)
                 if len(obs_intervals) > 0:
                     self._observations.append( {
                         'id':'{:04}'.format(od), 'ods':[q[0]],
@@ -360,7 +366,7 @@ class RingDB:
                     last_od = interval['od']
                     self._ods.append(last_od)
             return self._ods
-                    
+
 
     @property
     def intervals(self):
@@ -372,15 +378,23 @@ class RingDB:
             c = conn.cursor()
             self._intervals = []
             for tstart, tstop in zip(self.starts, self.stops):
-                cmd = 'select pointID_unique, ESA_ID, ACMS_mode, od, start_time, stop_time from split_ACMS_modes where start_time < {} and stop_time > {} AND ('.format(tstop, tstart)
-                if self.use_SCM: cmd += ' or ACMS_mode == "S"'
-                if self.use_HCM: cmd += ' or ACMS_mode == "H"'
-                if self.use_OCM: cmd += ' or ACMS_mode == "O"'
+                cmd = 'select pointID_unique, ESA_ID, ACMS_mode, ' \
+                      'od, start_time, stop_time from split_ACMS_modes ' \
+                      'where start_time < {} and stop_time > {} AND (' \
+                      ''.format(tstop, tstart)
+                if self.use_SCM:
+                    cmd += ' or ACMS_mode == "S"'
+                if self.use_HCM:
+                    cmd += ' or ACMS_mode == "H"'
+                if self.use_OCM:
+                    cmd += ' or ACMS_mode == "O"'
                 cmd = cmd.replace('( or', '(')
                 cmd += ' ) '
                 query = c.execute( cmd )
                 for q in query:
-                    self._intervals.append( {'id':q[0].encode('ascii'), 'ring':q[1].encode('ascii'), 'mode':q[2].encode('ascii'), 'od':q[3], 'start_time':q[4], 'stop_time':q[5]} )
+                    self._intervals.append({
+                        'id':q[0], 'ring':q[1], 'mode':q[2].encode('ascii'),
+                        'od':q[3], 'start_time':q[4], 'stop_time':q[5]} )
 
             return self._intervals
 
@@ -430,35 +444,39 @@ class RingDB:
             return self._AHF_files
         except:
             self._AHF_files = None
-    
+
     def get_EFF_files():
         pass
 
 
 if __name__ == '__main__':
-    
-    print 'Testing RingDB'
-    
+
+    print('Testing RingDB')
+
     db = RingDB( 'db.db', 30, od_range=[98,98], use_SCM=True, use_HCM=True, use_OCM=False )
 
-    print 'Intervals: '
-    for interval in db.intervals: print interval
+    print('Intervals: ')
+    for interval in db.intervals:
+        print(interval)
 
-    print 'Observations: '
+    print('Observations: ')
     for observation in db.observations:
-        print observation['id']
-        for interval in observation['intervals']: print interval
+        print(observation['id'])
+        for interval in observation['intervals']:
+            print(interval)
 
-    print 'ODs: ', db.ods
+    print('ODs: ', db.ods)
 
     db.apply_breaks()
 
-    print 'Intervals: '
-    for interval in db.intervals: print interval
+    print('Intervals: ')
+    for interval in db.intervals:
+        print(interval)
 
-    print 'Observations: '
+    print('Observations: ')
     for observation in db.observations:
-        print observation['id']
-        for interval in observation['intervals']: print interval
+        print(observation['id'])
+        for interval in observation['intervals']:
+            print(interval)
 
-    print 'Done!'
+    print('Done!')
